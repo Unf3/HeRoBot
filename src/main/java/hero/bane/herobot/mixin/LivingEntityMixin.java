@@ -1,6 +1,7 @@
 package hero.bane.herobot.mixin;
 
 import hero.bane.herobot.HeroBotSettings;
+import hero.bane.herobot.fakeplayer.FakePlayer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
@@ -63,7 +64,8 @@ public abstract class LivingEntityMixin extends Entity {
     )
     private void modifyKnockback(Entity entity, DamageSource damageSource, CallbackInfoReturnable<Float> cir) {
         LivingEntity self = (LivingEntity) (Object) this;
-        if (entity instanceof LivingEntity target && target.invulnerableTime < 20) {
+        if (entity instanceof LivingEntity target && target.invulnerableTime < 20 &&
+                target instanceof FakePlayer) { //Not sure if it's necessary or even a correct fix, but I'll test it a bit
             cir.setReturnValue(0.0F);
             return;
         }

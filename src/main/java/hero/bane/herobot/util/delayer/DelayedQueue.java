@@ -10,6 +10,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.permissions.PermissionSet;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.phys.Vec2;
 
 import java.util.ArrayList;
@@ -54,74 +55,78 @@ public final class DelayedQueue {
     public record Entry(String id, ExecutorData executor, String payload, boolean isFunction, long executeAt) {
 
         public long remainingTicks(ServerLevel level) {
-                return Math.max(0L, executeAt - level.getGameTime());
+            return Math.max(0L, executeAt - level.getGameTime());
+        }
+
+        public void execute(MinecraftServer server) {
+
+            CommandSourceStack source;
+
+            if (executor.type == ExecutorType.ENTITY) {
+
+                Entity entity = null;
+
+                for (ServerLevel level : server.getAllLevels()) {
+                    entity = level.getEntity(executor.entity);
+                    if (entity != null) {
+                        break;
+                    }
+                }
+
+                if (entity == null) return;
+
+                source = new CommandSourceStack(
+                        server,
+                        entity.position(),
+                        entity.getRotationVector(),
+                        (ServerLevel) entity.level(),
+                        PermissionSet.ALL_PERMISSIONS,
+                        entity.getName().getString(),
+                        entity.getDisplayName(),
+                        server,
+                        entity
+                ).withCallback(CommandResultCallback.EMPTY);
+
+            } else if (executor.type == ExecutorType.COMMAND_BLOCK) {
+
+                ServerLevel level = server.getLevel(executor.dimension);
+                if (level == null) return;
+
+                source = new CommandSourceStack(
+                        server,
+                        executor.pos.getCenter(),
+                        Vec2.ZERO,
+                        level,
+                        PermissionSet.ALL_PERMISSIONS,
+                        "@",
+                        Component.literal("@"),
+                        server,
+                        null
+                ).withCallback(CommandResultCallback.EMPTY);
+
+            } else {
+
+                source = server.createCommandSourceStack()
+                        .withCallback(CommandResultCallback.EMPTY);
             }
 
-            public void execute(MinecraftServer server) {
+            if (!source.getLevel().getGameRules().get(GameRules.COMMAND_BLOCK_OUTPUT)) {
+                source = source.withSuppressedOutput();
+            }
 
-                CommandSourceStack source;
-
-                if (executor.type == ExecutorType.ENTITY) {
-
-                    Entity entity = null;
-
-                    for (ServerLevel level : server.getAllLevels()) {
-                        entity = level.getEntity(executor.entity);
-                        if (entity != null) {
-                            break;
-                        }
-                    }
-
-                    if (entity == null) return;
-
-                    source = new CommandSourceStack(
-                            server,
-                            entity.position(),
-                            entity.getRotationVector(),
-                            (ServerLevel) entity.level(),
-                            PermissionSet.ALL_PERMISSIONS,
-                            entity.getName().getString(),
-                            entity.getDisplayName(),
-                            server,
-                            entity
-                    ).withCallback(CommandResultCallback.EMPTY);
-
-                } else if (executor.type == ExecutorType.COMMAND_BLOCK) {
-
-                    ServerLevel level = server.getLevel(executor.dimension);
-                    if (level == null) return;
-
-                    source = new CommandSourceStack(
-                            server,
-                            executor.pos.getCenter(),
-                            Vec2.ZERO,
-                            level,
-                            PermissionSet.ALL_PERMISSIONS,
-                            "@",
-                            Component.literal("@"),
-                            server,
-                            null
-                    ).withCallback(CommandResultCallback.EMPTY);
-
-                } else {
-
-                    source = server.createCommandSourceStack()
-                            .withCallback(CommandResultCallback.EMPTY);
-                }
-
-                if (isFunction) {
-                    server.getCommands().performPrefixedCommand(
-                            source,
-                            "function " + payload
-                    );
-                } else {
-                    server.getCommands().performPrefixedCommand(
-                            source,
-                            payload
-                    );
-                }
+            if (isFunction) {
+                server.getCommands().performPrefixedCommand(
+                        source,
+                        "function " + payload
+                );
+            } else {
+                server.getCommands().performPrefixedCommand(
+                        source,
+                        payload
+                );
             }
         }
+    }
 
     private static final List<Entry> QUEUE = new ArrayList<>();
 

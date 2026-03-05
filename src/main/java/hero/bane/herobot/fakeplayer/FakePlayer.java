@@ -53,7 +53,6 @@ import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.portal.TeleportTransition;
 import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.level.storage.TagValueInput;
@@ -271,7 +270,7 @@ public class FakePlayer extends ServerPlayer {
 //            ((ServerPlayerInterface) this).getActionPack().onUpdate();
             this.doTick();
 
-            handleSpear(); //not sure where else to put it so here it goes [maybe onUpdate would be better]
+            handleSpear(); //not sure where else to put it so here it goes [maybe onUpdate would be better, but this is easier]
         } catch (NullPointerException ignored) {
             // happens with that paper port thingy - not sure what that would fix, but hey
             // the game not gonna crash violently.
@@ -293,7 +292,7 @@ public class FakePlayer extends ServerPlayer {
         int effChargeTicks = used - kineticWeapon.delayTicks();
 
         Vec3 look = this.getLookAngle();
-        Vec3 attackerMotion = this.getDeltaMovement().scale(20.0);
+        Vec3 attackerMotion = this.getDeltaMovement().scale(20.0); //Cause velocity is bugged, it should be getKnownSpeed but getKnownSpeed is always 0 for some reason
         double attackerDot = look.dot(attackerMotion);
         double baseDamage = this.getAttributeBaseValue(Attributes.ATTACK_DAMAGE);
 
@@ -531,10 +530,11 @@ public class FakePlayer extends ServerPlayer {
         return HeroBotSettings.allowListingFakePlayers;
     }
 
-    @Override
-    protected void checkFallDamage(double y, boolean onGround, @NonNull BlockState state, @NonNull BlockPos pos) {
-        doCheckFallDamage(0.0, y, 0.0, onGround);
-    }
+    // Can be commented out since it runs fine without
+//    @Override
+//    protected void checkFallDamage(double y, boolean onGround, @NonNull BlockState state, @NonNull BlockPos pos) {
+//        doCheckFallDamage(0.0, y, 0.0, onGround);
+//    }
 
     @Override
     public boolean isInvulnerableTo(@NonNull ServerLevel serverLevel, @NonNull DamageSource damageSource) {

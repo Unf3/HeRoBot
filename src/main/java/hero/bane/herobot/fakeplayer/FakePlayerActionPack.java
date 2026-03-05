@@ -1,7 +1,6 @@
 package hero.bane.herobot.fakeplayer;
 
 import hero.bane.herobot.fakeplayer.connection.ServerPlayerInterface;
-import hero.bane.herobot.mixin.LivingEntityAccessor;
 import hero.bane.herobot.util.RayTrace;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
@@ -15,6 +14,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
@@ -41,12 +41,8 @@ public class FakePlayerActionPack {
 
     private int itemUseCooldown;
 
-    private double fakeFallDistance;
-    private double lastY;
-
     public FakePlayerActionPack(ServerPlayer playerIn) {
         player = playerIn;
-        lastY = player.getY();
         stopAll();
     }
 
@@ -162,50 +158,6 @@ public class FakePlayerActionPack {
 
     public void onUpdate() {
 
-        double y = player.getY();
-        double dy = y - lastY;
-
-        if (player.onGround()
-                || player.isInWater()
-                || player.onClimbable()
-                || player.isPassenger()) {
-            fakeFallDistance = 0;
-        } else if (player.isFallFlying()) {
-            Vec3 motion = player.getDeltaMovement();
-            Vec3 look = player.getLookAngle();
-
-            float f = player.getXRot() * ((float) Math.PI / 180F);
-            double d = Math.sqrt(look.x * look.x + look.z * look.z);
-            double e = motion.horizontalDistance();
-            double g = ((LivingEntityAccessor) player).invokeGetEffectiveGravity();
-            double h = Mth.square(Math.cos(f));
-
-            double predictedY = motion.y + g * (-1.0 + h * 0.75);
-
-            if (predictedY < 0.0 && d > 0.0) {
-                double i = predictedY * -0.1 * h;
-                predictedY += i;
-            }
-
-            if (f < 0.0F && d > 0.0) {
-                double i = e * (-Mth.sin(f)) * 0.04;
-                predictedY += i * 3.2;
-            }
-
-            if (predictedY < 0) {
-                fakeFallDistance -= predictedY;
-            } else {
-                fakeFallDistance = Math.max(0, fakeFallDistance - predictedY);
-            }
-        } else if (dy < 0) {
-            fakeFallDistance -= dy;
-        } else {
-            fakeFallDistance = 0;
-        }
-
-        lastY = y;
-        player.fallDistance = (float) fakeFallDistance;
-
         Map<ActionType, Boolean> actionAttempts = new HashMap<>();
         actions.values().removeIf(e -> e.done);
         for (Map.Entry<ActionType, Action> e : actions.entrySet()) {
@@ -239,11 +191,9 @@ public class FakePlayerActionPack {
         }
     }
 
-    //TODO: use player.entityAttackRange and player.entityInteractionRange
-
     static HitResult getTarget(ServerPlayer player) {
-        double blockReach = player.gameMode.isCreative() ? 5 : 4.5;
-        double entityReach = player.gameMode.isCreative() ? 5 : 3;
+        double blockReach = player.getAttributeValue(Attributes.BLOCK_INTERACTION_RANGE);
+        double entityReach = player.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE);
 
         HitResult hit = RayTrace.rayTrace(player, 1, blockReach, false);
 
@@ -251,41 +201,22 @@ public class FakePlayerActionPack {
         return RayTrace.rayTrace(player, 1, entityReach, false);
     }
 
-    static HitResult getSpearTarget(ServerPlayer player) {
-        double blockReach = player.gameMode.isCreative() ? 5 : 4.5;
-        double minEntityReach = 2.0;
-        double maxEntityReach = player.gameMode.isCreative() ? 6.5 : 4.5;
-
-        HitResult blockHit = RayTrace.rayTrace(player, 1, blockReach, false);
-        if (blockHit.getType() == HitResult.Type.BLOCK) {
-            return blockHit;
-        }
-
-        Vec3 eye = player.getEyePosition();
-        Vec3 look = player.getViewVector(1);
-
-        Vec3 start = eye.add(look.scale(minEntityReach));
-        Vec3 end = eye.add(look.scale(maxEntityReach));
-
-        EntityHitResult entityHit = RayTrace.rayTraceEntities(
-                player,
-                start,
-                end,
-                player.getBoundingBox()
-                        .expandTowards(look.scale(maxEntityReach))
-                        .inflate(1),
-                e -> !e.isSpectator() && e.isPickable(),
-                maxEntityReach * maxEntityReach
-        );
-
-        return entityHit == null
-                ? BlockHitResult.miss(end, player.getDirection(), BlockPos.containing(end))
-                : entityHit;
-    }
-
     public void setSlot(int slot) {
         player.getInventory().setSelectedSlot(slot - 1);
         player.connection.send(new ClientboundSetHeldSlotPacket(slot - 1));
+    }
+
+    private static boolean handleSpearStab(ServerPlayer player) {
+        if (player.getAttackStrengthScale(0.5F) < 1.0F) return false;
+        player.connection.handlePlayerAction(
+                new ServerboundPlayerActionPacket(
+                        ServerboundPlayerActionPacket.Action.STAB,
+                        player.blockPosition(),
+                        player.getDirection()
+                )
+        );
+        player.resetLastActionTime();
+        return true;
     }
 
     public enum ActionType {
@@ -360,30 +291,26 @@ public class FakePlayerActionPack {
             boolean execute(ServerPlayer player, Action action) {
                 ItemStack stack = player.getMainHandItem();
                 boolean isSpear = stack.has(DataComponents.KINETIC_WEAPON);
-                HitResult hit = isSpear ? getSpearTarget(player) : getTarget(player);
+
+                if (isSpear) {
+                    //After testing, spears always stab even if looking at block, so I'm returning early
+                    if (player.getAttackStrengthScale(0.5F) < 1.0F) return false;
+                    player.connection.handlePlayerAction(
+                            new ServerboundPlayerActionPacket(
+                                    ServerboundPlayerActionPacket.Action.STAB,
+                                    player.blockPosition(),
+                                    player.getDirection()
+                            )
+                    );
+                    player.resetLastActionTime();
+                    return true;
+                }
+
+                HitResult hit = getTarget(player);
                 switch (hit.getType()) {
                     case ENTITY: {
-                        if (isSpear) {
-                            if (player.getAttackStrengthScale(0.5F) >= 1.0F) {
-                                player.connection.handlePlayerAction(
-                                        new ServerboundPlayerActionPacket(
-                                                ServerboundPlayerActionPacket.Action.STAB,
-                                                player.blockPosition(),
-                                                player.getDirection()
-                                        )
-                                );
-                                player.resetLastActionTime();
-                                return true;
-                            } else {
-                                return false;
-                            }
-                        }
-                        EntityHitResult entityHit = (EntityHitResult) hit;
                         if (!action.isContinuous) {
-                            player.fallDistance = (float) ((ServerPlayerInterface) player)
-                                    .getActionPack()
-                                    .fakeFallDistance;
-                            player.attack(entityHit.getEntity());
+                            player.attack(((EntityHitResult) hit).getEntity());
                             player.swing(InteractionHand.MAIN_HAND);
                         }
                         player.resetAttackStrengthTicker();

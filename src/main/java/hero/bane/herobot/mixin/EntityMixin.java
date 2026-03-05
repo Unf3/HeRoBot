@@ -80,4 +80,11 @@ public abstract class EntityMixin {
 
         return original.call(type);
     }
+
+    @Inject(method = "isLocalInstanceAuthoritative", at = @At("HEAD"), cancellable = true)
+    private void fakePlayerIsAuthoritative(CallbackInfoReturnable<Boolean> cir) {
+        if ((Object) this instanceof FakePlayer) {
+            cir.setReturnValue(true);
+        }
+    }
 }
