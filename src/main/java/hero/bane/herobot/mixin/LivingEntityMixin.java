@@ -81,9 +81,9 @@ public abstract class LivingEntityMixin extends Entity {
                     damageSource,
                     baseKnockback
             );
-            cir.setReturnValue(modifiedKnockback);
+            cir.setReturnValue(modifiedKnockback / 2.0F);
         } else {
-            cir.setReturnValue(baseKnockback);
+            cir.setReturnValue(baseKnockback / 2.0F);
         }
     }
 }
