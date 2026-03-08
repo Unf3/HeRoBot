@@ -1,7 +1,7 @@
 package hero.bane.herobot.mixin;
 
 import hero.bane.herobot.HeroBotSettings;
-import hero.bane.herobot.fakeplayer.FakePlayer;
+import hero.bane.herobot.bot.BotPlayer;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
@@ -70,9 +70,9 @@ public abstract class PlayerMixin extends LivingEntity {
                     ordinal = 0,
                     opcode = Opcodes.GETFIELD) //It says it needs it, not sure if it breaks things
     )
-    private boolean velocityModifiedAndNotCarpetFakePlayer(Entity target)
+    private boolean velocityModifiedAndNotBotPlayer(Entity target)
     {
-        return target.hurtMarked && !(target instanceof FakePlayer);
+        return target.hurtMarked && !(target instanceof BotPlayer);
     }
 
     @Inject(method = "blockUsingItem", at = @At("HEAD"))

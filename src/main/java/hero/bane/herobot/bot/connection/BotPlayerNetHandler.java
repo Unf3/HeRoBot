@@ -1,6 +1,6 @@
-package hero.bane.herobot.fakeplayer.connection;
+package hero.bane.herobot.bot.connection;
 
-import hero.bane.herobot.fakeplayer.FakePlayer;
+import hero.bane.herobot.bot.BotPlayer;
 import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
@@ -14,9 +14,9 @@ import net.minecraft.world.entity.Relative;
 
 import java.util.Set;
 
-public class FakePlayerNetHandler extends ServerGamePacketListenerImpl {
+public class BotPlayerNetHandler extends ServerGamePacketListenerImpl {
 
-    public FakePlayerNetHandler(
+    public BotPlayerNetHandler(
             MinecraftServer server,
             Connection connection,
             ServerPlayer player,
@@ -35,7 +35,7 @@ public class FakePlayerNetHandler extends ServerGamePacketListenerImpl {
             String key = text.getKey();
             if (key.equals("multiplayer.disconnect.idling")
                     || key.equals("multiplayer.disconnect.duplicate_login")) {
-                ((FakePlayer) player).kill(message);
+                ((BotPlayer) player).kill(message);
             }
         }
     }

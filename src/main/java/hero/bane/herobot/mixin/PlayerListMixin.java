@@ -1,8 +1,8 @@
 package hero.bane.herobot.mixin;
 
 import com.mojang.authlib.GameProfile;
-import hero.bane.herobot.fakeplayer.FakePlayer;
-import hero.bane.herobot.fakeplayer.connection.FakePlayerNetHandler;
+import hero.bane.herobot.bot.BotPlayer;
+import hero.bane.herobot.bot.connection.BotPlayerNetHandler;
 import net.minecraft.network.Connection;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ClientInformation;
@@ -28,9 +28,9 @@ public abstract class PlayerListMixin {
     @Inject(method = "placeNewPlayer", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/level/ServerPlayer;level()Lnet/minecraft/server/level/ServerLevel;"))
     private void fixStartingPos(Connection connection, ServerPlayer serverPlayer, CommonListenerCookie commonListenerCookie, CallbackInfo ci)
     {
-        if (serverPlayer instanceof FakePlayer)
+        if (serverPlayer instanceof BotPlayer)
         {
-            ((FakePlayer) serverPlayer).fixStartingPosition.run();
+            ((BotPlayer) serverPlayer).fixStartingPosition.run();
         }
     }
 
@@ -47,8 +47,8 @@ public abstract class PlayerListMixin {
             ServerPlayer player,
             CommonListenerCookie cookie
     ) {
-        if (player instanceof FakePlayer fake) {
-            return new FakePlayerNetHandler(this.server, connection, fake, cookie);
+        if (player instanceof BotPlayer bot) {
+            return new BotPlayerNetHandler(this.server, connection, bot, cookie);
         }
         return new ServerGamePacketListenerImpl(this.server, connection, player, cookie);
     }
@@ -68,8 +68,8 @@ public abstract class PlayerListMixin {
             ServerPlayer oldPlayer,
             boolean alive
     ) {
-        if (oldPlayer instanceof FakePlayer) {
-            return FakePlayer.respawnFake(this.server, level, profile, cli);
+        if (oldPlayer instanceof BotPlayer) {
+            return BotPlayer.respawnFake(this.server, level, profile, cli);
         }
         return new ServerPlayer(this.server, level, profile, cli);
     }

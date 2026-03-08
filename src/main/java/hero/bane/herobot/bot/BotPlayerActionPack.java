@@ -1,6 +1,6 @@
-package hero.bane.herobot.fakeplayer;
+package hero.bane.herobot.bot;
 
-import hero.bane.herobot.fakeplayer.connection.ServerPlayerInterface;
+import hero.bane.herobot.bot.connection.ServerPlayerInterface;
 import hero.bane.herobot.util.RayTrace;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
@@ -24,7 +24,7 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
 
-public class FakePlayerActionPack {
+public class BotPlayerActionPack {
     public final ServerPlayer player;
 
     private final Map<ActionType, Action> actions = new EnumMap<>(ActionType.class);
@@ -41,12 +41,12 @@ public class FakePlayerActionPack {
 
     private int itemUseCooldown;
 
-    public FakePlayerActionPack(ServerPlayer playerIn) {
+    public BotPlayerActionPack(ServerPlayer playerIn) {
         player = playerIn;
         stopAll();
     }
 
-    public void copyFrom(FakePlayerActionPack other) {
+    public void copyFrom(BotPlayerActionPack other) {
         actions.putAll(other.actions);
         currentBlock = other.currentBlock;
         blockHitDelay = other.blockHitDelay;
@@ -61,7 +61,7 @@ public class FakePlayerActionPack {
         itemUseCooldown = other.itemUseCooldown;
     }
 
-    public FakePlayerActionPack start(ActionType type, Action action) {
+    public BotPlayerActionPack start(ActionType type, Action action) {
         if (action.isContinuous) {
             Action curent = actions.get(type);
             if (curent != null) return this;
@@ -74,7 +74,7 @@ public class FakePlayerActionPack {
         return this;
     }
 
-    public FakePlayerActionPack stop(ActionType type) {
+    public BotPlayerActionPack stop(ActionType type) {
         Action action = actions.remove(type);
         if (action != null) {
             type.stop(player, action);
@@ -86,29 +86,29 @@ public class FakePlayerActionPack {
         return this;
     }
 
-    public FakePlayerActionPack setSneaking(boolean doSneak) {
+    public BotPlayerActionPack setSneaking(boolean doSneak) {
         sneaking = doSneak;
         player.setShiftKeyDown(doSneak);
         return this;
     }
 
-    public FakePlayerActionPack setSprinting(boolean doSprint) {
+    public BotPlayerActionPack setSprinting(boolean doSprint) {
         sprinting = doSprint;
         player.setSprinting(doSprint);
         return this;
     }
 
-    public FakePlayerActionPack setForward(float value) {
+    public BotPlayerActionPack setForward(float value) {
         forward = value;
         return this;
     }
 
-    public FakePlayerActionPack setStrafing(float value) {
+    public BotPlayerActionPack setStrafing(float value) {
         strafing = value;
         return this;
     }
 
-    public FakePlayerActionPack look(Direction direction) {
+    public BotPlayerActionPack look(Direction direction) {
         return switch (direction) {
             case NORTH -> look(180, 0);
             case SOUTH -> look(0, 0);
@@ -119,30 +119,30 @@ public class FakePlayerActionPack {
         };
     }
 
-    public FakePlayerActionPack look(Vec2 rotation) {
+    public BotPlayerActionPack look(Vec2 rotation) {
         return look(rotation.y, rotation.x);
     }
 
-    public FakePlayerActionPack look(float yaw, float pitch) {
+    public BotPlayerActionPack look(float yaw, float pitch) {
         player.setYRot(yaw % 360);
         player.setXRot(Mth.clamp(pitch, -90, 90));
         return this;
     }
 
-    public FakePlayerActionPack lookAt(Vec3 position) {
+    public BotPlayerActionPack lookAt(Vec3 position) {
         player.lookAt(EntityAnchorArgument.Anchor.EYES, position);
         return this;
     }
 
-    public FakePlayerActionPack turn(float yaw, float pitch) {
+    public BotPlayerActionPack turn(float yaw, float pitch) {
         return look(player.getYRot() + yaw, player.getXRot() + pitch);
     }
 
-    public FakePlayerActionPack turn(Vec2 rotation) {
+    public BotPlayerActionPack turn(Vec2 rotation) {
         return turn(rotation.x, rotation.y);
     }
 
-    public FakePlayerActionPack stopMovement() {
+    public BotPlayerActionPack stopMovement() {
         setSneaking(false);
         setSprinting(false);
         forward = 0.0F;
@@ -150,7 +150,7 @@ public class FakePlayerActionPack {
         return this;
     }
 
-    public FakePlayerActionPack stopAll() {
+    public BotPlayerActionPack stopAll() {
         for (ActionType type : actions.keySet()) type.stop(player, actions.get(type));
         actions.clear();
         return stopMovement();
@@ -183,10 +183,10 @@ public class FakePlayerActionPack {
                 !player.getMainHandItem().has(DataComponents.KINETIC_WEAPON))
                 ? 0.20F : 1.0F;
 
-        if (forward != 0.0F || player instanceof FakePlayer) {
+        if (forward != 0.0F || player instanceof BotPlayer) {
             player.zza = forward * vel;
         }
-        if (strafing != 0.0F || player instanceof FakePlayer) {
+        if (strafing != 0.0F || player instanceof BotPlayer) {
             player.xxa = strafing * vel;
         }
     }
@@ -223,7 +223,7 @@ public class FakePlayerActionPack {
         USE(true) {
             @Override
             boolean execute(ServerPlayer player, Action action) {
-                FakePlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+                BotPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
                 if (ap.itemUseCooldown > 0) {
                     ap.itemUseCooldown--;
                     return true;
@@ -281,7 +281,7 @@ public class FakePlayerActionPack {
 
             @Override
             void inactiveTick(ServerPlayer player, Action action) {
-                FakePlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+                BotPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
                 ap.itemUseCooldown = 0;
                 player.releaseUsingItem();
             }
@@ -318,7 +318,7 @@ public class FakePlayerActionPack {
                         return true;
                     }
                     case BLOCK: {
-                        FakePlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+                        BotPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
                         if (ap.blockHitDelay > 0) {
                             ap.blockHitDelay--;
                             return false;
@@ -486,7 +486,7 @@ public class FakePlayerActionPack {
             return new Action(-1, interval, 0, false, null);
         }
 
-        Boolean tick(FakePlayerActionPack actionPack, ActionType type) {
+        Boolean tick(BotPlayerActionPack actionPack, ActionType type) {
             next--;
             Boolean cancel = null;
             if (next <= 0) {
@@ -514,7 +514,7 @@ public class FakePlayerActionPack {
             return cancel;
         }
 
-        void retry(FakePlayerActionPack actionPack, ActionType type) {
+        void retry(BotPlayerActionPack actionPack, ActionType type) {
             if (!type.preventSpectator || !actionPack.player.isSpectator()) {
                 type.execute(actionPack.player, this);
             }

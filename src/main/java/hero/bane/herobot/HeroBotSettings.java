@@ -28,8 +28,8 @@ public final class HeroBotSettings {
     @Rule(desc = "Spawn offline players in online mode if online-mode player with specified name does not exist")
     public static boolean allowSpawningOfflinePlayers = true;
 
-    @Rule(desc = "Allows listing fake players on the multiplayer screen")
-    public static boolean allowListingFakePlayers = true;
+    @Rule(desc = "Allows listing bot players on the multiplayer screen")
+    public static boolean allowListingBotPlayers = true;
 
     @Rule(desc = "Creative No Clip, allows to client player to phase through blocks")
     public static boolean creativeNoClip = false;

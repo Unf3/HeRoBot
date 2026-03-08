@@ -26,6 +26,7 @@
     "ServerPlayerMixin",
     "ShulkerBoxBlockEntityMixin",
     "StandingAndWallBlockItemMixin",
+    "TickRateManagerMixin",
     "WindChargeMixin"
   ],
   "injectors": {

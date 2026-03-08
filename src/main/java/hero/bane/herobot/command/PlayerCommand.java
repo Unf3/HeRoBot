@@ -7,11 +7,11 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
-import hero.bane.herobot.fakeplayer.FakePlayer;
-import hero.bane.herobot.fakeplayer.FakePlayerActionPack;
-import hero.bane.herobot.fakeplayer.FakePlayerActionPack.Action;
-import hero.bane.herobot.fakeplayer.FakePlayerActionPack.ActionType;
-import hero.bane.herobot.fakeplayer.connection.ServerPlayerInterface;
+import hero.bane.herobot.bot.BotPlayer;
+import hero.bane.herobot.bot.BotPlayerActionPack;
+import hero.bane.herobot.bot.BotPlayerActionPack.Action;
+import hero.bane.herobot.bot.BotPlayerActionPack.ActionType;
+import hero.bane.herobot.bot.connection.ServerPlayerInterface;
 import hero.bane.herobot.util.ItemCooldown;
 import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSourceStack;
@@ -38,8 +38,8 @@ import static net.minecraft.commands.Commands.argument;
 import static net.minecraft.commands.Commands.literal;
 
 public class PlayerCommand {
-    private static final SimpleCommandExceptionType NOT_FAKE =
-            new SimpleCommandExceptionType(Component.literal("Only fake players can be targeted"));
+    private static final SimpleCommandExceptionType NOT_BOT =
+            new SimpleCommandExceptionType(Component.literal("Only bot players can be targeted"));
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher, CommandBuildContext ctx) {
         dispatcher.register(
@@ -48,7 +48,7 @@ public class PlayerCommand {
                         .then(argument("targets", EntityArgument.players())
 
                                 .then(literal("stop")
-                                        .executes(manipulation(FakePlayerActionPack::stopAll)))
+                                        .executes(manipulation(BotPlayerActionPack::stopAll)))
 
                                 .then(makeActionCommand("use", ActionType.USE))
                                 .then(makeActionCommand("swing", ActionType.SWING))
@@ -89,7 +89,7 @@ public class PlayerCommand {
                                         .executes(manipulation(ap -> ap.setSprinting(false))))
 
                                 .then(literal("move")
-                                        .executes(manipulation(FakePlayerActionPack::stopMovement))
+                                        .executes(manipulation(BotPlayerActionPack::stopMovement))
                                         .then(literal("forward")
                                                 .executes(manipulation(ap -> ap.setForward(1))))
                                         .then(literal("backward")
@@ -149,9 +149,9 @@ public class PlayerCommand {
                                         .then(argument("source", EntityArgument.player())
                                                 .executes(context -> {
                                                     ServerPlayer source = EntityArgument.getPlayer(context, "source");
-                                                    for (FakePlayer fake : requireFakeTargets(context))
+                                                    for (BotPlayer bot : requireBotTargets(context))
                                                     {
-                                                        fake.copycat(source);
+                                                        bot.copycat(source);
                                                     }
                                                     return 1;
                                                 })))
@@ -174,44 +174,44 @@ public class PlayerCommand {
     }
 
 
-    private static List<FakePlayer> requireFakeTargets(CommandContext<CommandSourceStack> context)
+    private static List<BotPlayer> requireBotTargets(CommandContext<CommandSourceStack> context)
             throws CommandSyntaxException {
         Collection<ServerPlayer> players = EntityArgument.getPlayers(context, "targets");
-        List<FakePlayer> fakes = new ArrayList<>();
+        List<BotPlayer> bots = new ArrayList<>();
 
         for (ServerPlayer p : players) {
-            if (!(p instanceof FakePlayer fake))
-                throw NOT_FAKE.create();
-            fakes.add(fake);
+            if (!(p instanceof BotPlayer bot))
+                throw NOT_BOT.create();
+            bots.add(bot);
         }
 
-        if (fakes.isEmpty())
-            throw NOT_FAKE.create();
+        if (bots.isEmpty())
+            throw NOT_BOT.create();
 
-        return fakes;
+        return bots;
     }
 
     private static int manipulate(CommandContext<CommandSourceStack> context,
-                                  Consumer<FakePlayerActionPack> action)
+                                  Consumer<BotPlayerActionPack> action)
             throws CommandSyntaxException {
-        for (FakePlayer fake : requireFakeTargets(context))
-            action.accept(((ServerPlayerInterface) fake).getActionPack());
+        for (BotPlayer bot : requireBotTargets(context))
+            action.accept(((ServerPlayerInterface) bot).getActionPack());
         return 1;
     }
 
-    private static Command<CommandSourceStack> manipulation(Consumer<FakePlayerActionPack> action) {
+    private static Command<CommandSourceStack> manipulation(Consumer<BotPlayerActionPack> action) {
         return c -> manipulate(c, action);
     }
 
     private static int kill(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
-        for (FakePlayer fake : requireFakeTargets(context))
-            fake.kill(fake.level());
+        for (BotPlayer bot : requireBotTargets(context))
+            bot.kill(bot.level());
         return 1;
     }
 
     private static int disconnect(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
-        for (FakePlayer fake : requireFakeTargets(context))
-            fake.fakePlayerDisconnect(Component.literal(""));
+        for (BotPlayer bot : requireBotTargets(context))
+            bot.botPlayerDisconnect(Component.literal(""));
         return 1;
     }
 
@@ -231,8 +231,8 @@ public class PlayerCommand {
                 case CLOSEST -> closestPointToBox(eyePos, target.getBoundingBox());
             };
 
-            if (player instanceof ServerPlayerInterface fake)
-                fake.getActionPack().lookAt(lookTarget);
+            if (player instanceof ServerPlayerInterface spi)
+                spi.getActionPack().lookAt(lookTarget);
             else
                 player.lookAt(EntityAnchorArgument.Anchor.EYES, lookTarget);
         }

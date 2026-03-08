@@ -1,4 +1,4 @@
-package hero.bane.herobot.fakeplayer.connection;
+package hero.bane.herobot.bot.connection;
 
 import io.netty.channel.Channel;
 

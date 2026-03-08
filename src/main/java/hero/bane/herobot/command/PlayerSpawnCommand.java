@@ -4,7 +4,7 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
-import hero.bane.herobot.fakeplayer.FakePlayer;
+import hero.bane.herobot.bot.BotPlayer;
 import net.minecraft.SharedConstants;
 import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSourceStack;
@@ -89,7 +89,7 @@ public class PlayerSpawnCommand {
         MinecraftServer server = source.getServer();
         PlayerList playerList = server.getPlayerList();
 
-        if (FakePlayer.isSpawningPlayer(name)) return 0;
+        if (BotPlayer.isSpawningPlayer(name)) return 0;
         if (playerList.getPlayerByName(name) != null) return 0;
         if (name.length() > maxNameLength(server)) return 0;
 
@@ -141,7 +141,7 @@ public class PlayerSpawnCommand {
             flying = false;
         }
 
-        FakePlayer.createFake(
+        BotPlayer.createFake(
                 name,
                 server,
                 pos,

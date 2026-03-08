@@ -3,7 +3,7 @@ package hero.bane.herobot.mixin;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import hero.bane.herobot.HeroBotSettings;
-import hero.bane.herobot.fakeplayer.FakePlayer;
+import hero.bane.herobot.bot.BotPlayer;
 import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
@@ -34,8 +34,8 @@ public abstract class EntityMixin {
     private final Entity self = (Entity) (Object) this;
 
     @Inject(method = "isLocalInstanceAuthoritative", at = @At("HEAD"), cancellable = true)
-    private void isFakePlayer(CallbackInfoReturnable<Boolean> cir) {
-        if (getControllingPassenger() instanceof FakePlayer || (Object) this instanceof FakePlayer)
+    private void isBotPlayer(CallbackInfoReturnable<Boolean> cir) {
+        if (getControllingPassenger() instanceof BotPlayer || (Object) this instanceof BotPlayer)
             cir.setReturnValue(!level.isClientSide());
     }
 

@@ -1,9 +1,9 @@
-package hero.bane.herobot.fakeplayer;
+package hero.bane.herobot.bot;
 
 import com.mojang.authlib.GameProfile;
 import hero.bane.herobot.HeroBotSettings;
-import hero.bane.herobot.fakeplayer.connection.FakeClientConnection;
-import hero.bane.herobot.fakeplayer.connection.ServerPlayerInterface;
+import hero.bane.herobot.bot.connection.BotClientConnection;
+import hero.bane.herobot.bot.connection.ServerPlayerInterface;
 import hero.bane.herobot.mixin.LivingEntityAccessor;
 import hero.bane.herobot.mixin.ServerPlayerAccessor;
 import it.unimi.dsi.fastutil.doubles.DoubleDoubleImmutablePair;
@@ -67,7 +67,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 @SuppressWarnings("EntityConstructor")
-public class FakePlayer extends ServerPlayer {
+public class BotPlayer extends ServerPlayer {
     private static final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
     private static final Set<String> spawning = new HashSet<>();
 
@@ -119,11 +119,11 @@ public class FakePlayer extends ServerPlayer {
                 current = p;
             }
 
-            FakePlayer instance = new FakePlayer(server, worldIn, current, ClientInformation.createDefault(), false);
+            BotPlayer instance = new BotPlayer(server, worldIn, current, ClientInformation.createDefault(), false);
             instance.fixStartingPosition = () -> instance.snapTo(pos.x, pos.y, pos.z, (float) yaw, (float) pitch);
-            server.getPlayerList().placeNewPlayer(new FakeClientConnection(PacketFlow.SERVERBOUND), instance, new CommonListenerCookie(current, 0, instance.clientInformation(), false));
+            server.getPlayerList().placeNewPlayer(new BotClientConnection(PacketFlow.SERVERBOUND), instance, new CommonListenerCookie(current, 0, instance.clientInformation(), false));
             loadPlayerData(instance);
-            instance.stopRiding(); // otherwise the created fake player will be on the vehicle
+            instance.stopRiding(); // otherwise the created bot player will be on the vehicle
             assert worldIn != null;
             instance.teleportTo(worldIn, pos.x, pos.y, pos.z, Set.of(), (float) yaw, (float) pitch, true);
             instance.setHealth(20.0F);
@@ -158,7 +158,7 @@ public class FakePlayer extends ServerPlayer {
         return resolvableProfile.resolveProfile(server.services().profileResolver());
     }
 
-    private static void loadPlayerData(FakePlayer player) {
+    private static void loadPlayerData(BotPlayer player) {
         player.level().getServer().getPlayerList()
                 .loadPlayerData(player.nameAndId())
                 .map(tag -> TagValueInput.create(
@@ -173,13 +173,13 @@ public class FakePlayer extends ServerPlayer {
                 });
     }
 
-//    public static FakePlayer createShadow(MinecraftServer server, ServerPlayer player) {
+//    public static BotPlayer createShadow(MinecraftServer server, ServerPlayer player) {
 //        player.connection.disconnect(Component.translatable("multiplayer.disconnect.duplicate_login"));
 //        ServerLevel worldIn = player.level();//.getWorld(player.dimension);
 //        GameProfile gameprofile = player.getGameProfile();
-//        FakePlayer playerShadow = new FakePlayer(server, worldIn, gameprofile, player.clientInformation(), true);
+//        BotPlayer playerShadow = new BotPlayer(server, worldIn, gameprofile, player.clientInformation(), true);
 //        playerShadow.setChatSession(player.getChatSession());
-//        server.getPlayerList().placeNewPlayer(new FakeClientConnection(PacketFlow.SERVERBOUND), playerShadow, new CommonListenerCookie(gameprofile, 0, player.clientInformation(), true));
+//        server.getPlayerList().placeNewPlayer(new BotClientConnection(PacketFlow.SERVERBOUND), playerShadow, new CommonListenerCookie(gameprofile, 0, player.clientInformation(), true));
 //        loadPlayerData(playerShadow);
 //
 //        playerShadow.setHealth(player.getHealth());
@@ -217,15 +217,15 @@ public class FakePlayer extends ServerPlayer {
         this.inventoryMenu.sendAllDataToRemote();
     }
 
-    public static FakePlayer respawnFake(MinecraftServer server, ServerLevel level, GameProfile profile, ClientInformation cli) {
-        return new FakePlayer(server, level, profile, cli, false);
+    public static BotPlayer respawnFake(MinecraftServer server, ServerLevel level, GameProfile profile, ClientInformation cli) {
+        return new BotPlayer(server, level, profile, cli, false);
     }
 
     public static boolean isSpawningPlayer(String username) {
         return spawning.contains(username);
     }
 
-    private FakePlayer(MinecraftServer server, ServerLevel worldIn, GameProfile profile, ClientInformation cli, boolean shadow) {
+    private BotPlayer(MinecraftServer server, ServerLevel worldIn, GameProfile profile, ClientInformation cli, boolean shadow) {
         super(server, worldIn, profile, cli);
         this.isAShadow = shadow;
     }
@@ -240,7 +240,7 @@ public class FakePlayer extends ServerPlayer {
         kill(Component.literal("Killed"));
     }
 
-    public void fakePlayerDisconnect(Component reason) {
+    public void botPlayerDisconnect(Component reason) {
         this.level().getServer().schedule(new TickTask(this.level().getServer().getTickCount(), () ->
                 this.connection.onDisconnect(new DisconnectionDetails(reason))
         ));
@@ -318,7 +318,7 @@ public class FakePlayer extends ServerPlayer {
 //            if (this.wasRecentlyStabbed(entity, kinetic.contactCooldownTicks())) continue;
 //            this.rememberStabbedEntity(entity);
 
-            Vec3 targetMotion = entity instanceof FakePlayer ? this.getDeltaMovement().scale(20.0) : entity.getKnownSpeed().scale(20.0);
+            Vec3 targetMotion = entity instanceof BotPlayer ? this.getDeltaMovement().scale(20.0) : entity.getKnownSpeed().scale(20.0);
             double targetDot = look.dot(targetMotion);
             double relative = Math.max(0.0, attackerDot - targetDot);
 
@@ -510,11 +510,11 @@ public class FakePlayer extends ServerPlayer {
             );
 
             ServerPlayer p = this.connection.player;
-            if (p instanceof FakePlayer fake) {
-                fake.setHealth(20.0F);
-                fake.foodData = new FoodData();
-                fake.setExperienceLevels(0);
-                fake.setExperiencePoints(0);
+            if (p instanceof BotPlayer bot) {
+                bot.setHealth(20.0F);
+                bot.foodData = new FoodData();
+                bot.setExperienceLevels(0);
+                bot.setExperiencePoints(0);
             }
         });
     }
@@ -527,7 +527,7 @@ public class FakePlayer extends ServerPlayer {
 
     @Override
     public boolean allowsListing() {
-        return HeroBotSettings.allowListingFakePlayers;
+        return HeroBotSettings.allowListingBotPlayers;
     }
 
     // Can be commented out since it runs fine without

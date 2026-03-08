@@ -1,8 +1,8 @@
 package hero.bane.herobot.mixin;
 
 import com.mojang.authlib.GameProfile;
-import hero.bane.herobot.fakeplayer.FakePlayerActionPack;
-import hero.bane.herobot.fakeplayer.connection.ServerPlayerInterface;
+import hero.bane.herobot.bot.BotPlayerActionPack;
+import hero.bane.herobot.bot.connection.ServerPlayerInterface;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ClientInformation;
 import net.minecraft.server.level.ServerLevel;
@@ -16,16 +16,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(ServerPlayer.class)
 public abstract class ServerPlayerMixin implements ServerPlayerInterface {
     @Unique
-    public FakePlayerActionPack actionPack;
+    public BotPlayerActionPack actionPack;
 
     @Override
-    public FakePlayerActionPack getActionPack() {
+    public BotPlayerActionPack getActionPack() {
         return actionPack;
     }
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void onServerPlayerEntityContructor(MinecraftServer minecraftServer, ServerLevel serverLevel, GameProfile gameProfile, ClientInformation cli, CallbackInfo ci) {
-        this.actionPack = new FakePlayerActionPack((ServerPlayer) (Object) this);
+        this.actionPack = new BotPlayerActionPack((ServerPlayer) (Object) this);
     }
 
     @Inject(method = "tick", at = @At("HEAD"))

@@ -1,6 +1,6 @@
 package hero.bane.herobot.mixin;
 
-import hero.bane.herobot.fakeplayer.connection.ClientConnectionInterface;
+import hero.bane.herobot.bot.connection.ClientConnectionInterface;
 import io.netty.channel.Channel;
 import net.minecraft.network.Connection;
 import org.spongepowered.asm.mixin.Mixin;

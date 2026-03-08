@@ -1,4 +1,4 @@
-package hero.bane.herobot.fakeplayer.connection;
+package hero.bane.herobot.bot.connection;
 
 import io.netty.channel.embedded.EmbeddedChannel;
 import net.minecraft.network.Connection;
@@ -6,8 +6,8 @@ import net.minecraft.network.PacketListener;
 import net.minecraft.network.ProtocolInfo;
 import net.minecraft.network.protocol.PacketFlow;
 
-public class FakeClientConnection extends Connection {
-    public FakeClientConnection(PacketFlow p) {
+public class BotClientConnection extends Connection {
+    public BotClientConnection(PacketFlow p) {
         super(p);
         ((ClientConnectionInterface) this).setChannel(new EmbeddedChannel());
     }
