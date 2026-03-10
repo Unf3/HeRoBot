@@ -4,6 +4,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.ArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.TextColor;
 
@@ -24,6 +25,7 @@ public final class RuleCommandBuilder {
                     }
                     return b.buildFuture();
                 })
+                .requires(Commands.hasPermission(Commands.LEVEL_ADMINS))
                 .executes(c -> {
                     RuleEntry rule = RuleRegistry.get(StringArgumentType.getString(c, "rule"));
                     if (rule == null) return 0;

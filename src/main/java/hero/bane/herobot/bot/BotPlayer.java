@@ -61,15 +61,26 @@ import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.NonNull;
 
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 @SuppressWarnings("EntityConstructor")
 public class BotPlayer extends ServerPlayer {
     private static final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
     private static final Set<String> spawning = new HashSet<>();
+
+    public int ping = 0;
+
+    //thought this was a clean way to do this
+    private record DelayedKnockback(long tick, double strength, double x, double z) {
+    }
+
+    private final List<DelayedKnockback> pendingKnockbacks = new ArrayList<>();
+
+    //thought this was a clean way to do this (yes I said it twice frick you)
+    private record DelayedExplosionKB(long tick, Vec3 explosionKB) {
+    }
+
+    private final List<DelayedExplosionKB> pendingExplosionKB = new ArrayList<>();
 
     public Runnable fixStartingPosition = () -> {
     };
@@ -143,10 +154,11 @@ public class BotPlayer extends ServerPlayer {
                     ),
                     false
             );
+            instance.ping = 0;
             instance.spawnYaw = yaw;
             server.getPlayerList().broadcastAll(new ClientboundRotateHeadPacket(instance, (byte) (instance.yHeadRot * 256 / 360)), dimensionId);//instance.dimension);
             server.getPlayerList().broadcastAll(ClientboundEntityPositionSyncPacket.of(instance), dimensionId);//instance.dimension);
-            //instance.world.getChunkManager(). updatePosition(instance);
+            // TODO: Add commands to toggle/set specific skin parts and left/right handedness (idk the word)
             instance.entityData.set(DATA_PLAYER_MODE_CUSTOMISATION, (byte) 0x7f); // show all model layers (incl. capes)
             instance.getAbilities().flying = flying;
         }, server);
@@ -173,30 +185,32 @@ public class BotPlayer extends ServerPlayer {
                 });
     }
 
-//    public static BotPlayer createShadow(MinecraftServer server, ServerPlayer player) {
-//        player.connection.disconnect(Component.translatable("multiplayer.disconnect.duplicate_login"));
-//        ServerLevel worldIn = player.level();//.getWorld(player.dimension);
-//        GameProfile gameprofile = player.getGameProfile();
-//        BotPlayer playerShadow = new BotPlayer(server, worldIn, gameprofile, player.clientInformation(), true);
-//        playerShadow.setChatSession(player.getChatSession());
-//        server.getPlayerList().placeNewPlayer(new BotClientConnection(PacketFlow.SERVERBOUND), playerShadow, new CommonListenerCookie(gameprofile, 0, player.clientInformation(), true));
-//        loadPlayerData(playerShadow);
-//
-//        playerShadow.setHealth(player.getHealth());
-//        playerShadow.connection.teleport(player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot());
-//        playerShadow.gameMode.changeGameModeForPlayer(player.gameMode.getGameModeForPlayer());
-//        ((ServerPlayerInterface) playerShadow).getActionPack().copyFrom(((ServerPlayerInterface) player).getActionPack());
-//        // this might create problems if a player logs back in...
-//        playerShadow.getAttribute(Attributes.STEP_HEIGHT).setBaseValue(0.6F);
-//        playerShadow.entityData.set(DATA_PLAYER_MODE_CUSTOMISATION, player.getEntityData().get(DATA_PLAYER_MODE_CUSTOMISATION));
-//
-//
-//        server.getPlayerList().broadcastAll(new ClientboundRotateHeadPacket(playerShadow, (byte) (player.yHeadRot * 256 / 360)), playerShadow.level().dimension());
-//        server.getPlayerList().broadcastAll(new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER, playerShadow));
-//        //player.world.getChunkManager().updatePosition(playerShadow);
-//        playerShadow.getAbilities().flying = player.getAbilities().flying;
-//        return playerShadow;
-//    }
+    /*
+    public static BotPlayer createShadow(MinecraftServer server, ServerPlayer player) {
+        player.connection.disconnect(Component.translatable("multiplayer.disconnect.duplicate_login"));
+        ServerLevel worldIn = player.level();//.getWorld(player.dimension);
+        GameProfile gameprofile = player.getGameProfile();
+        BotPlayer playerShadow = new BotPlayer(server, worldIn, gameprofile, player.clientInformation(), true);
+        playerShadow.setChatSession(player.getChatSession());
+        server.getPlayerList().placeNewPlayer(new BotClientConnection(PacketFlow.SERVERBOUND), playerShadow, new CommonListenerCookie(gameprofile, 0, player.clientInformation(), true));
+        loadPlayerData(playerShadow);
+
+        playerShadow.setHealth(player.getHealth());
+        playerShadow.connection.teleport(player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot());
+        playerShadow.gameMode.changeGameModeForPlayer(player.gameMode.getGameModeForPlayer());
+        ((ServerPlayerInterface) playerShadow).getActionPack().copyFrom(((ServerPlayerInterface) player).getActionPack());
+        // this might create problems if a player logs back in...
+        playerShadow.getAttribute(Attributes.STEP_HEIGHT).setBaseValue(0.6F);
+        playerShadow.entityData.set(DATA_PLAYER_MODE_CUSTOMISATION, player.getEntityData().get(DATA_PLAYER_MODE_CUSTOMISATION));
+
+
+        server.getPlayerList().broadcastAll(new ClientboundRotateHeadPacket(playerShadow, (byte) (player.yHeadRot * 256 / 360)), playerShadow.level().dimension());
+        server.getPlayerList().broadcastAll(new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER, playerShadow));
+        //player.world.getChunkManager().updatePosition(playerShadow);
+        playerShadow.getAbilities().flying = player.getAbilities().flying;
+        return playerShadow;
+    }
+    */
 
     public void copycat(ServerPlayer otherPlayer) {
         if (!(otherPlayer instanceof ServerPlayerInterface src)) {
@@ -270,11 +284,68 @@ public class BotPlayer extends ServerPlayer {
 //            ((ServerPlayerInterface) this).getActionPack().onUpdate();
             this.doTick();
 
+            processPendingKBs();
             handleSpear(); //not sure where else to put it so here it goes [maybe onUpdate would be better, but this is easier]
         } catch (NullPointerException ignored) {
             // happens with that paper port thingy - not sure what that would fix, but hey
             // the game not gonna crash violently.
         }
+    }
+
+    private void processPendingKBs() {
+        long currentTick = this.level().getServer().getTickCount();
+        if (!pendingKnockbacks.isEmpty()) {
+            var i = pendingKnockbacks.iterator();
+            while (i.hasNext()) {
+                DelayedKnockback kb = i.next();
+                if (currentTick >= kb.tick()) {
+                    super.knockback(kb.strength(), kb.x(), kb.z());
+                    i.remove();
+                }
+            }
+        }
+        if (!pendingExplosionKB.isEmpty()) {
+            var i = pendingExplosionKB.iterator();
+            while (i.hasNext()) {
+                DelayedExplosionKB dp = i.next();
+                if (currentTick >= dp.tick()) {
+                    super.push(dp.explosionKB());
+                    i.remove();
+                }
+            }
+        }
+    }
+
+    public void delayedExplosionKB(Vec3 vec3) {
+        int delayTicks = delayTicks();
+        if (delayTicks <= 0) {
+            super.push(vec3);
+        } else {
+            long executeAt = this.level().getServer().getTickCount() + delayTicks;
+            pendingExplosionKB.add(new DelayedExplosionKB(executeAt, vec3));
+        }
+    }
+
+    @Override
+    public void knockback(double strength, double x, double z) {
+        int delayTicks = delayTicks();
+        if (delayTicks <= 0) {
+            super.knockback(strength, x, z);
+        } else {
+            long executeAt = this.level().getServer().getTickCount() + delayTicks;
+            pendingKnockbacks.add(new DelayedKnockback(executeAt, strength, x, z));
+        }
+    }
+
+    private int delayTicks() {
+        int pingToTicks = HeroBotSettings.botPingToTicks;
+        int remainder = ping % pingToTicks;
+        if (remainder == 0) {
+            return ping / pingToTicks;
+        }
+        int random = ThreadLocalRandom.current().nextInt(pingToTicks);
+        // I think this should be similar to how regular mc works with ping
+        return random < remainder ? (ping / pingToTicks) + 1 : ping / pingToTicks;
     }
 
     private void handleSpear() {

@@ -1,15 +1,19 @@
 package hero.bane.herobot.mixin;
 
 import hero.bane.herobot.HeroBotSettings;
+import hero.bane.herobot.bot.BotPlayer;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.ServerExplosion;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.Iterator;
@@ -49,6 +53,15 @@ public class ServerExplosionMixin {
         }
 
         return list;
+    }
+
+    @Redirect(method = "hurtEntities", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/Entity;push(Lnet/minecraft/world/phys/Vec3;)V"))
+    private void explosionKBPing(Entity entity, Vec3 vec3) {
+        if (entity instanceof BotPlayer botPlayer) {
+            botPlayer.delayedExplosionKB(vec3);
+        } else {
+            entity.push(vec3);
+        }
     }
 
     @Unique

@@ -7,6 +7,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
+import hero.bane.herobot.HeroBotSettings;
 import hero.bane.herobot.bot.BotPlayer;
 import hero.bane.herobot.bot.BotPlayerActionPack;
 import hero.bane.herobot.bot.BotPlayerActionPack.Action;
@@ -145,12 +146,25 @@ public class PlayerCommand {
                                                                 RotationArgument.getRotation(c, "direction")
                                                                         .getRotation(c.getSource())
                                                         )))))
+                                .then(literal("ping")
+                                        .executes(PlayerCommand::pingGet)
+                                        .then(argument("value", IntegerArgumentType.integer(0))
+                                                .suggests((c, b) -> {
+                                                    b.suggest(0);
+                                                    b.suggest(25);
+                                                    b.suggest(50);
+                                                    b.suggest(100);
+                                                    b.suggest(150);
+                                                    b.suggest(200);
+                                                    return b.buildFuture();
+                                                })
+                                                .executes(PlayerCommand::pingSet)))
+
                                 .then(literal("copycat")
                                         .then(argument("source", EntityArgument.player())
                                                 .executes(context -> {
                                                     ServerPlayer source = EntityArgument.getPlayer(context, "source");
-                                                    for (BotPlayer bot : requireBotTargets(context))
-                                                    {
+                                                    for (BotPlayer bot : requireBotTargets(context)) {
                                                         bot.copycat(source);
                                                     }
                                                     return 1;
@@ -210,9 +224,35 @@ public class PlayerCommand {
     }
 
     private static int disconnect(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
-        for (BotPlayer bot : requireBotTargets(context))
+        for (BotPlayer bot : requireBotTargets(context)) {
+            bot.ping = 0;
             bot.botPlayerDisconnect(Component.literal(""));
+        }
         return 1;
+    }
+
+    private static int pingSet(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        int value = IntegerArgumentType.getInteger(context, "value");
+        for (BotPlayer bot : requireBotTargets(context)) {
+            bot.ping = value;
+            context.getSource().sendSuccess(() -> Component.literal("Set " + bot.getGameProfile().name() + "'s ping to " + value + "ms"), false);
+        }
+        return 1;
+    }
+
+    private static int pingGet(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        List<BotPlayer> botPlayerList = requireBotTargets(context);
+        if (!botPlayerList.isEmpty()) {
+            int botPing = botPlayerList.getFirst().ping;
+            int pingToTicks = HeroBotSettings.botPingToTicks;
+            context.getSource().sendSuccess(() -> Component.literal("Bot Ping: " + botPing +
+                    "\nDelay in Ticks: " + botPing / pingToTicks +
+                    (botPing % pingToTicks > 0 ? "\n with a " + botPing % pingToTicks + "/" + pingToTicks + " chance to add 1 tick" : "")
+            ), false);
+            return botPing;
+        } else {
+            return 0;
+        }
     }
 
 

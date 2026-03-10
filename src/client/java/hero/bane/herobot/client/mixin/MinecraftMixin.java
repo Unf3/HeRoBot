@@ -13,7 +13,7 @@ public class MinecraftMixin
     @Inject(method = "getTickTargetMillis", at = @At("HEAD"), cancellable = true)
     private void onGetTickTargetMillis(final float f, final CallbackInfoReturnable<Float> cir)
     {
-        if (!HeroBotSettings.smoothClientAnimations) {
+        if (!HeroBotSettings.clientsIgnoreSlowTickRate) {
             cir.setReturnValue(f);
         }
     }

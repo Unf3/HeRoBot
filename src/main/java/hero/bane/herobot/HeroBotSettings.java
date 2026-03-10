@@ -46,8 +46,8 @@ public final class HeroBotSettings {
     @Rule(desc = "Enables editing player nbt, so you can directly edit values within a player's data")
     public static boolean editablePlayerNbt = false;
 
-    @Rule(desc = "Smooth client animations with low tps settings")
-    public static boolean smoothClientAnimations = false;
+    @Rule(desc = "If false, makes client players ignore slower tick rates")
+    public static boolean clientsIgnoreSlowTickRate = true;
 
     @Rule(desc = "Allows intentional game design explosions (from beds and respawn anchors) to not explode with fire")
     public static boolean explosionNoFire = false;
@@ -75,4 +75,7 @@ public final class HeroBotSettings {
 
     @Rule(desc = "Shulker Boxes will always drop, regardless if the gamerule noTileDrops is on")
     public static boolean shulkerBoxAlwaysDrops = false;
+
+    @Rule(desc = "Change the ping to tick conversion for Bot Players (default 25)")
+    public static int botPingToTicks = 25;
 }
