@@ -26,13 +26,16 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Consumer;
 
 import static net.minecraft.commands.Commands.argument;
@@ -100,52 +103,65 @@ public class PlayerCommand {
                                         .then(literal("right")
                                                 .executes(manipulation(ap -> ap.setStrafing(-1)))))
 
-                                .then(literal("turn")
-                                        .then(literal("left")
-                                                .executes(manipulation(ap -> ap.turn(-90, 0))))
-                                        .then(literal("right")
-                                                .executes(manipulation(ap -> ap.turn(90, 0))))
-                                        .then(literal("back")
-                                                .executes(manipulation(ap -> ap.turn(180, 0))))
-                                        .then(argument("rotation", RotationArgument.rotation())
-                                                .executes(c -> manipulate(c,
-                                                        ap -> ap.turn(
-                                                                RotationArgument.getRotation(c, "rotation")
-                                                                        .getRotation(c.getSource())
-                                                        )))))
-
                                 .then(literal("look")
-                                        .then(literal("north")
-                                                .executes(manipulation(ap -> ap.look(Direction.NORTH))))
-                                        .then(literal("south")
-                                                .executes(manipulation(ap -> ap.look(Direction.SOUTH))))
-                                        .then(literal("east")
-                                                .executes(manipulation(ap -> ap.look(Direction.EAST))))
-                                        .then(literal("west")
-                                                .executes(manipulation(ap -> ap.look(Direction.WEST))))
-                                        .then(literal("up")
-                                                .executes(manipulation(ap -> ap.look(Direction.UP))))
-                                        .then(literal("down")
-                                                .executes(manipulation(ap -> ap.look(Direction.DOWN))))
+                                        // Cardinals
+                                        .then(makeLookDirectionCommand("north", Direction.NORTH))
+                                        .then(makeLookDirectionCommand("south", Direction.SOUTH))
+                                        .then(makeLookDirectionCommand("east", Direction.EAST))
+                                        .then(makeLookDirectionCommand("west", Direction.WEST))
+
+                                        // Verticals (idk, it's technically relative cause you look vertically but also still looking where you were looking before)
+                                        .then(makeLookDirectionCommand("up", Direction.UP))
+                                        .then(makeLookDirectionCommand("down", Direction.DOWN))
+
+                                        // Relatives
+                                        .then(makeLookRelativeCommand("left", -90))
+                                        .then(makeLookRelativeCommand("right", 90))
+                                        .then(makeLookRelativeCommand("back", 180))
+
+                                        .then(literal("relative")
+                                                .then(argument("rotation", RotationArgument.rotation())
+                                                        .executes(c -> lookRelative(c, 0))
+                                                        .then(literal("interpolate")
+                                                                .then(argument("ticks", IntegerArgumentType.integer(1))
+                                                                        .executes(c -> lookRelative(c, IntegerArgumentType.getInteger(c, "ticks")))))))
+
+                                        .then(literal("random")
+                                                .executes(manipulation(ap -> {
+                                                    float yaw = ThreadLocalRandom.current().nextFloat() * 360 - 180;
+                                                    float pitch = ThreadLocalRandom.current().nextFloat() * 180 - 90;
+                                                    ap.look(yaw, pitch);
+                                                })))
                                         .then(literal("upon")
                                                 .then(argument("entity", EntityArgument.entity())
-                                                        .executes(c -> lookUpon(c, LookMode.EYES))
-                                                        .then(literal("eyes")
-                                                                .executes(c -> lookUpon(c, LookMode.EYES)))
-                                                        .then(literal("feet")
-                                                                .executes(c -> lookUpon(c, LookMode.FEET)))
-                                                        .then(literal("closest")
-                                                                .executes(c -> lookUpon(c, LookMode.CLOSEST)))))
+                                                        .executes(c -> lookUpon(c, LookMode.EYES, 0))
+                                                        .then(makeLookUponMode("eyes", LookMode.EYES))
+                                                        .then(makeLookUponMode("feet", LookMode.FEET))
+                                                        .then(makeLookUponMode("closest", LookMode.CLOSEST))
+                                                        .then(literal("interpolate")
+                                                                .then(argument("ticks", IntegerArgumentType.integer(1))
+                                                                        .executes(c -> lookUpon(c, LookMode.EYES, IntegerArgumentType.getInteger(c, "ticks")))))))
                                         .then(literal("at")
                                                 .then(argument("position", Vec3Argument.vec3())
                                                         .executes(c -> manipulate(c,
-                                                                ap -> ap.lookAt(Vec3Argument.getVec3(c, "position"))))))
+                                                                ap -> ap.lookAt(Vec3Argument.getVec3(c, "position"))))
+                                                        .then(literal("interpolate")
+                                                                .then(argument("ticks", IntegerArgumentType.integer(1))
+                                                                        .executes(c -> manipulate(c,
+                                                                                ap -> ap.lookAt(Vec3Argument.getVec3(c, "position"),
+                                                                                        IntegerArgumentType.getInteger(c, "ticks"))))))))
                                         .then(argument("direction", RotationArgument.rotation())
                                                 .executes(c -> manipulate(c,
                                                         ap -> ap.look(
                                                                 RotationArgument.getRotation(c, "direction")
-                                                                        .getRotation(c.getSource())
-                                                        )))))
+                                                                        .getRotation(c.getSource()))))
+                                                .then(literal("interpolate")
+                                                        .then(argument("ticks", IntegerArgumentType.integer(1))
+                                                                .executes(c -> manipulate(c,
+                                                                        ap -> ap.look(
+                                                                                RotationArgument.getRotation(c, "direction")
+                                                                                        .getRotation(c.getSource()),
+                                                                                IntegerArgumentType.getInteger(c, "ticks"))))))))
                                 .then(literal("ping")
                                         .executes(PlayerCommand::pingGet)
                                         .then(argument("value", IntegerArgumentType.integer(0))
@@ -169,6 +185,22 @@ public class PlayerCommand {
                                                     }
                                                     return 1;
                                                 })))
+
+                                .then(literal("skin")
+                                        .then(makeSkinPartCommand("cape", BotPlayer.SKIN_CAPE))
+                                        .then(makeSkinPartCommand("jacket", BotPlayer.SKIN_JACKET))
+                                        .then(makeSkinPartCommand("leftSleeve", BotPlayer.SKIN_LEFT_SLEEVE))
+                                        .then(makeSkinPartCommand("rightSleeve", BotPlayer.SKIN_RIGHT_SLEEVE))
+                                        .then(makeSkinPartCommand("leftPant", BotPlayer.SKIN_LEFT_PANT))
+                                        .then(makeSkinPartCommand("rightPant", BotPlayer.SKIN_RIGHT_PANT))
+                                        .then(makeSkinPartCommand("hat", BotPlayer.SKIN_HAT)))
+
+                                // There's probably a better name for this but idk, like dexterity maybe? Dextrousness?? whatever
+                                .then(literal("handedness")
+                                        .then(literal("left")
+                                                .executes(c -> setHandedness(c, true)))
+                                        .then(literal("right")
+                                                .executes(c -> setHandedness(c, false))))
                         )
         );
     }
@@ -246,8 +278,8 @@ public class PlayerCommand {
             int botPing = botPlayerList.getFirst().ping;
             int pingToTicks = HeroBotSettings.botPingToTicks;
             context.getSource().sendSuccess(() -> Component.literal("Bot Ping: " + botPing +
-                    "\nDelay in Ticks: " + botPing / pingToTicks +
-                    (botPing % pingToTicks > 0 ? "\n with a " + botPing % pingToTicks + "/" + pingToTicks + " chance to add 1 tick" : "")
+                    "ms\nDelay in Ticks: " + botPing / pingToTicks +
+                    (botPing % pingToTicks > 0 ? "\n with a " + botPing % pingToTicks + "/" + pingToTicks + " chance to add a tick" : "")
             ), false);
             return botPing;
         } else {
@@ -258,7 +290,7 @@ public class PlayerCommand {
 
     private enum LookMode {EYES, FEET, CLOSEST}
 
-    private static int lookUpon(CommandContext<CommandSourceStack> context, LookMode mode)
+    private static int lookUpon(CommandContext<CommandSourceStack> context, LookMode mode, int ticks)
             throws CommandSyntaxException {
         Entity target = EntityArgument.getEntity(context, "entity");
         Collection<ServerPlayer> players = EntityArgument.getPlayers(context, "targets");
@@ -272,12 +304,53 @@ public class PlayerCommand {
             };
 
             if (player instanceof ServerPlayerInterface spi)
-                spi.getActionPack().lookAt(lookTarget);
+                spi.getActionPack().lookAt(lookTarget, ticks);
             else
                 player.lookAt(EntityAnchorArgument.Anchor.EYES, lookTarget);
         }
 
         return players.size();
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> makeLookDirectionCommand(String name, Direction direction) {
+        return literal(name)
+                .executes(manipulation(ap -> ap.look(direction)))
+                .then(literal("interpolate")
+                        .then(argument("ticks", IntegerArgumentType.integer(1))
+                                .executes(c -> manipulate(c,
+                                        ap -> ap.look(direction, IntegerArgumentType.getInteger(c, "ticks"))))));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> makeLookRelativeCommand(String name, float yaw) {
+        return literal(name)
+                .executes(manipulation(ap -> ap.turn(yaw, (float) 0)))
+                .then(literal("interpolate")
+                        .then(argument("ticks", IntegerArgumentType.integer(1))
+                                .executes(c -> manipulate(c,
+                                        ap -> ap.turn(yaw, (float) 0, IntegerArgumentType.getInteger(c, "ticks"))))));
+    }
+
+    private static int lookRelative(CommandContext<CommandSourceStack> context, int ticks)
+            throws CommandSyntaxException {
+        for (BotPlayer bot : requireBotTargets(context)) {
+            CommandSourceStack botSource = context.getSource().withRotation(new Vec2(bot.getXRot(), bot.getYRot()));
+            Vec2 rotation = RotationArgument.getRotation(context, "rotation").getRotation(botSource);
+            BotPlayerActionPack ap = ((ServerPlayerInterface) bot).getActionPack();
+            if (ticks > 0) {
+                ap.look(rotation, ticks);
+            } else {
+                ap.look(rotation);
+            }
+        }
+        return 1;
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> makeLookUponMode(String name, LookMode mode) {
+        return literal(name)
+                .executes(c -> lookUpon(c, mode, 0))
+                .then(literal("interpolate")
+                        .then(argument("ticks", IntegerArgumentType.integer(1))
+                                .executes(c -> lookUpon(c, mode, IntegerArgumentType.getInteger(c, "ticks")))));
     }
 
     private static Vec3 closestPointToBox(Vec3 eye, AABB box) {
@@ -286,5 +359,30 @@ public class PlayerCommand {
                 Mth.clamp(eye.y, box.minY, box.maxY),
                 Mth.clamp(eye.z, box.minZ, box.maxZ)
         );
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> makeSkinPartCommand(String name, byte mask) {
+        return literal(name)
+                .executes(c -> {
+                    for (BotPlayer bot : requireBotTargets(c)) {
+                        bot.toggleSkinPart(mask);
+                        boolean enabled = bot.isSkinPartEnabled(mask);
+                        c.getSource().sendSuccess(() -> Component.literal(
+                                bot.getGameProfile().name() + ": " + name + " " + (enabled ? "shown" : "hidden")), false);
+                    }
+                    return 1;
+                });
+    }
+
+    private static int setHandedness(CommandContext<CommandSourceStack> context, boolean leftHanded)
+            throws CommandSyntaxException {
+        HumanoidArm arm = leftHanded ? HumanoidArm.LEFT : HumanoidArm.RIGHT;
+        String handName = leftHanded ? "left" : "right";
+        for (BotPlayer bot : requireBotTargets(context)) {
+            bot.setMainHand(arm);
+            context.getSource().sendSuccess(() -> Component.literal(
+                    bot.getGameProfile().name() + ": main hand set to " + handName), false);
+        }
+        return 1;
     }
 }

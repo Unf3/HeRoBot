@@ -4,13 +4,36 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.TextColor;
 import net.minecraft.util.Mth;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class DistanceCalculator {
-    public static List<Component> findDistanceBetweenTwoPoints(Vec3 pos1, Vec3 pos2, int result) {
+
+    public static Vec3 closestPointOnHitbox(AABB aabb, Vec3 point) {
+        return new Vec3(
+                Mth.clamp(point.x, aabb.minX, aabb.maxX),
+                Mth.clamp(point.y, aabb.minY, aabb.maxY),
+                Mth.clamp(point.z, aabb.minZ, aabb.maxZ)
+        );
+    }
+
+    public static Vec3[] closestPointsBetween(AABB from, AABB to) {
+        Vec3 centerFrom = from.getCenter();
+        Vec3 onTo = closestPointOnHitbox(to, centerFrom);
+        Vec3 onFrom = closestPointOnHitbox(from, onTo);
+        Vec3 onToFinal = closestPointOnHitbox(to, onFrom);
+        return new Vec3[]{onFrom, onToFinal};
+    }
+
+    public static int distanceBetweenBoxes(CommandSourceStack source, AABB from, AABB to, int exponent) {
+        Vec3[] closest = closestPointsBetween(from, to);
+        return distance(source, closest[0], closest[1], exponent);
+    }
+
+    public static List<Component> distanceBetweenPoints(Vec3 pos1, Vec3 pos2, int result) {
         double dx = Mth.abs((float) pos1.x - (float) pos2.x);
         double dy = Mth.abs((float) pos1.y - (float) pos2.y);
         double dz = Mth.abs((float) pos1.z - (float) pos2.z);
@@ -48,7 +71,7 @@ public class DistanceCalculator {
         int scale = exponent <= 0 ? 1 : (int) Math.pow(10, exponent);
         int result = (int) Math.round(dist * scale);
 
-        List<Component> distances = findDistanceBetweenTwoPoints(pos1, pos2, result);
+        List<Component> distances = distanceBetweenPoints(pos1, pos2, result);
 
         for (Component c : distances) {
             source.sendSuccess(() -> c, false);

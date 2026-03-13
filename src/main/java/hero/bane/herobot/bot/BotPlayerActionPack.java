@@ -1,5 +1,6 @@
 package hero.bane.herobot.bot;
 
+import hero.bane.herobot.HeroBotSettings;
 import hero.bane.herobot.bot.connection.ServerPlayerInterface;
 import hero.bane.herobot.util.RayTrace;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
@@ -20,9 +21,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.*;
 
-import java.util.EnumMap;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 public class BotPlayerActionPack {
     public final ServerPlayer player;
@@ -40,6 +39,29 @@ public class BotPlayerActionPack {
     private float strafing;
 
     private int itemUseCooldown;
+
+    private record DelayedAction(long tick, Runnable action) {
+    }
+
+    private final List<DelayedAction> pendingActions = new ArrayList<>();
+
+    private LookInterpolation lookInterpolation;
+
+    private static class LookInterpolation {
+        float targetYaw;
+        float targetPitch;
+        float deltaYaw;
+        float deltaPitch;
+        int ticksRemaining;
+
+        LookInterpolation(float targetYaw, float targetPitch, float deltaYaw, float deltaPitch, int ticks) {
+            this.targetYaw = targetYaw;
+            this.targetPitch = targetPitch;
+            this.deltaYaw = deltaYaw;
+            this.deltaPitch = deltaPitch;
+            this.ticksRemaining = ticks;
+        }
+    }
 
     public BotPlayerActionPack(ServerPlayer playerIn) {
         player = playerIn;
@@ -142,6 +164,85 @@ public class BotPlayerActionPack {
         return turn(rotation.x, rotation.y);
     }
 
+    public BotPlayerActionPack lookInterpolated(float targetYaw, float targetPitch, int ticks) {
+        if (ticks <= 0) return look(targetYaw, targetPitch);
+        float clampedPitch = Mth.clamp(targetPitch, -90, 90);
+        lookInterpolation = new LookInterpolation(
+                targetYaw,
+                clampedPitch,
+                Mth.wrapDegrees(targetYaw - player.getYRot()) / ticks,
+                (clampedPitch - player.getXRot()) / ticks,
+                ticks
+        );
+        return this;
+    }
+
+    public BotPlayerActionPack look(Direction direction, int ticks) {
+        float targetYaw, targetPitch;
+        switch (direction) {
+            case NORTH -> {
+                targetYaw = 180;
+                targetPitch = 0;
+            }
+            case SOUTH -> {
+                targetYaw = 0;
+                targetPitch = 0;
+            }
+            case EAST -> {
+                targetYaw = -90;
+                targetPitch = 0;
+            }
+            case WEST -> {
+                targetYaw = 90;
+                targetPitch = 0;
+            }
+            case UP -> {
+                targetYaw = player.getYRot();
+                targetPitch = -90;
+            }
+            case DOWN -> {
+                targetYaw = player.getYRot();
+                targetPitch = 90;
+            }
+            default -> {
+                return this;
+            }
+        }
+        return lookInterpolated(targetYaw, targetPitch, ticks);
+    }
+
+    public BotPlayerActionPack look(float yaw, float pitch, int ticks) {
+        return lookInterpolated(yaw, pitch, ticks);
+    }
+
+    public BotPlayerActionPack look(Vec2 rotation, int ticks) {
+        return lookInterpolated(rotation.y, rotation.x, ticks);
+    }
+
+    public BotPlayerActionPack turn(float yaw, float pitch, int ticks) {
+        return lookInterpolated(player.getYRot() + yaw, player.getXRot() + pitch, ticks);
+    }
+
+    public BotPlayerActionPack turn(Vec2 rotation, int ticks) {
+        return turn(rotation.x, rotation.y, ticks);
+    }
+
+    public BotPlayerActionPack lookAt(Vec3 position, int ticks) {
+        if (ticks <= 0) return lookAt(position);
+        Vec3 eye = player.getEyePosition();
+        double dx = position.x - eye.x;
+        double dy = position.y - eye.y;
+        double dz = position.z - eye.z;
+        double dist = Math.sqrt(dx * dx + dz * dz);
+        float yaw = Mth.wrapDegrees((float) (Mth.atan2(dz, dx) * (180.0 / Math.PI)) - 90.0F);
+        float pitch = Mth.wrapDegrees((float) (-(Mth.atan2(dy, dist) * (180.0 / Math.PI))));
+        return lookInterpolated(yaw, pitch, ticks);
+    }
+
+    public void stopInterpolation() {
+        lookInterpolation = null;
+    }
+
     public BotPlayerActionPack stopMovement() {
         setSneaking(false);
         setSprinting(false);
@@ -153,10 +254,33 @@ public class BotPlayerActionPack {
     public BotPlayerActionPack stopAll() {
         for (ActionType type : actions.keySet()) type.stop(player, actions.get(type));
         actions.clear();
+        stopInterpolation();
         return stopMovement();
     }
 
     public void onUpdate() {
+        if (lookInterpolation != null) {
+            lookInterpolation.ticksRemaining--;
+            if (lookInterpolation.ticksRemaining == 0) {
+                look(lookInterpolation.targetYaw, lookInterpolation.targetPitch);
+                lookInterpolation = null;
+            } else {
+                player.setYRot(Mth.wrapDegrees(player.getYRot() + lookInterpolation.deltaYaw));
+                player.setXRot(Mth.clamp(player.getXRot() + lookInterpolation.deltaPitch, -90, 90));
+            }
+        }
+
+        if (!pendingActions.isEmpty()) {
+            long currentTick = player.level().getServer().getTickCount();
+            var it = pendingActions.iterator();
+            while (it.hasNext()) {
+                DelayedAction da = it.next();
+                if (currentTick >= da.tick()) {
+                    da.action().run();
+                    it.remove();
+                }
+            }
+        }
 
         Map<ActionType, Boolean> actionAttempts = new HashMap<>();
         actions.values().removeIf(e -> e.done);
@@ -232,51 +356,18 @@ public class BotPlayerActionPack {
                     return true;
                 }
                 HitResult hit = getTarget(player);
-                for (InteractionHand hand : InteractionHand.values()) {
-                    switch (hit.getType()) {
-                        case BLOCK: {
-                            player.resetLastActionTime();
-                            ServerLevel world = player.level();
-                            BlockHitResult blockHit = (BlockHitResult) hit;
-                            BlockPos pos = blockHit.getBlockPos();
-                            Direction side = blockHit.getDirection();
-                            if (pos.getY() < player.level().getMaxY() - (side == Direction.UP ? 1 : 0) && world.mayInteract(player, pos)) {
-                                InteractionResult result = player.gameMode.useItemOn(player, world, player.getItemInHand(hand), hand, blockHit);
-                                if (result instanceof InteractionResult.Success success) {
-                                    if (success.swingSource() == InteractionResult.SwingSource.SERVER)
-                                        player.swing(hand);
-                                    ap.itemUseCooldown = 3;
-                                    return true;
-                                }
-                            }
-                            break;
-                        }
-                        case ENTITY: {
-                            player.resetLastActionTime();
-                            EntityHitResult entityHit = (EntityHitResult) hit;
-                            Entity entity = entityHit.getEntity();
-                            boolean handWasEmpty = player.getItemInHand(hand).isEmpty();
-                            boolean itemFrameEmpty = (entity instanceof ItemFrame) && ((ItemFrame) entity).getItem().isEmpty();
-                            Vec3 relativeHitPos = entityHit.getLocation().subtract(entity.getX(), entity.getY(), entity.getZ());
-                            if (entity.interactAt(player, relativeHitPos, hand).consumesAction()) {
-                                ap.itemUseCooldown = 3;
-                                return true;
-                            }
-                            // fix for SS itemframe always returns CONSUME even if no action is performed
-                            if (player.interactOn(entity, hand).consumesAction() && !(handWasEmpty && itemFrameEmpty)) {
-                                ap.itemUseCooldown = 3;
-                                return true;
-                            }
-                            break;
-                        }
-                    }
-                    ItemStack handItem = player.getItemInHand(hand);
-                    if (player.gameMode.useItem(player, player.level(), handItem, hand).consumesAction()) {
-                        ap.itemUseCooldown = 3;
+
+                if (player instanceof BotPlayer bot && HeroBotSettings.botLagUses) {
+                    int delay = bot.delayTicks();
+                    if (delay > 0) {
+                        long executeAt = player.level().getServer().getTickCount() + delay;
+                        ap.pendingActions.add(new DelayedAction(executeAt, () -> executeUse(player, hit)));
+                        ap.itemUseCooldown = delay;
                         return true;
                     }
                 }
-                return false;
+
+                return executeUse(player, hit);
             }
 
             @Override
@@ -295,22 +386,61 @@ public class BotPlayerActionPack {
                 if (isSpear) {
                     //After testing, spears always stab even if looking at block, so I'm returning early
                     if (player.getAttackStrengthScale(0.5F) < 1.0F) return false;
-                    player.connection.handlePlayerAction(
-                            new ServerboundPlayerActionPacket(
-                                    ServerboundPlayerActionPacket.Action.STAB,
-                                    player.blockPosition(),
-                                    player.getDirection()
-                            )
-                    );
-                    player.resetLastActionTime();
+
+                    if (player instanceof BotPlayer bot && HeroBotSettings.botLagAttacks) {
+                        int delay = bot.delayTicks();
+                        if (delay > 0) {
+                            BotPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+                            long executeAt = player.level().getServer().getTickCount() + delay;
+                            ap.pendingActions.add(new DelayedAction(executeAt, () -> handleSpearStab(player)));
+                            return true;
+                        }
+                    }
+                    handleSpearStab(player);
                     return true;
                 }
 
                 HitResult hit = getTarget(player);
                 switch (hit.getType()) {
                     case ENTITY: {
-                        if (!action.isContinuous) {
-                            player.attack(((EntityHitResult) hit).getEntity());
+                        Entity target = ((EntityHitResult) hit).getEntity();
+                        boolean continuous = action.isContinuous;
+
+                        if (player instanceof BotPlayer bot && HeroBotSettings.botLagAttacks) {
+                            int delay = bot.delayTicks();
+                            if (delay > 0) {
+                                boolean wasSprinting = player.isSprinting();
+                                double savedFallDistance = player.fallDistance;
+                                boolean wasOnGround = player.onGround();
+
+                                BotPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+                                long executeAt = player.level().getServer().getTickCount() + delay;
+                                ap.pendingActions.add(new DelayedAction(executeAt, () -> {
+                                    boolean currentSprinting = player.isSprinting();
+                                    double currentFallDistance = player.fallDistance;
+                                    boolean currentOnGround = player.onGround();
+
+                                    player.setSprinting(wasSprinting);
+                                    player.fallDistance = savedFallDistance;
+                                    player.setOnGround(wasOnGround);
+
+                                    if (!continuous) {
+                                        player.attack(target);
+                                        player.swing(InteractionHand.MAIN_HAND);
+                                    }
+                                    player.resetAttackStrengthTicker();
+                                    player.resetLastActionTime();
+
+                                    player.setSprinting(currentSprinting);
+                                    player.fallDistance = currentFallDistance;
+                                    player.setOnGround(currentOnGround);
+                                }));
+                                return true;
+                            }
+                        }
+
+                        if (!continuous) {
+                            player.attack(target);
                             player.swing(InteractionHand.MAIN_HAND);
                         }
                         player.resetAttackStrengthTicker();
@@ -435,6 +565,55 @@ public class BotPlayerActionPack {
                 return false;
             }
         };
+
+        private static boolean executeUse(ServerPlayer player, HitResult hit) {
+            BotPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+            for (InteractionHand hand : InteractionHand.values()) {
+                switch (hit.getType()) {
+                    case BLOCK: {
+                        player.resetLastActionTime();
+                        ServerLevel world = player.level();
+                        BlockHitResult blockHit = (BlockHitResult) hit;
+                        BlockPos pos = blockHit.getBlockPos();
+                        Direction side = blockHit.getDirection();
+                        if (pos.getY() < player.level().getMaxY() - (side == Direction.UP ? 1 : 0) && world.mayInteract(player, pos)) {
+                            InteractionResult result = player.gameMode.useItemOn(player, world, player.getItemInHand(hand), hand, blockHit);
+                            if (result instanceof InteractionResult.Success success) {
+                                if (success.swingSource() == InteractionResult.SwingSource.SERVER)
+                                    player.swing(hand);
+                                ap.itemUseCooldown = 3;
+                                return true;
+                            }
+                        }
+                        break;
+                    }
+                    case ENTITY: {
+                        player.resetLastActionTime();
+                        EntityHitResult entityHit = (EntityHitResult) hit;
+                        Entity entity = entityHit.getEntity();
+                        boolean handWasEmpty = player.getItemInHand(hand).isEmpty();
+                        boolean itemFrameEmpty = (entity instanceof ItemFrame) && ((ItemFrame) entity).getItem().isEmpty();
+                        Vec3 relativeHitPos = entityHit.getLocation().subtract(entity.getX(), entity.getY(), entity.getZ());
+                        if (entity.interactAt(player, relativeHitPos, hand).consumesAction()) {
+                            ap.itemUseCooldown = 3;
+                            return true;
+                        }
+                        // fix for SS itemframe always returns CONSUME even if no action is performed
+                        if (player.interactOn(entity, hand).consumesAction() && !(handWasEmpty && itemFrameEmpty)) {
+                            ap.itemUseCooldown = 3;
+                            return true;
+                        }
+                        break;
+                    }
+                }
+                ItemStack handItem = player.getItemInHand(hand);
+                if (player.gameMode.useItem(player, player.level(), handItem, hand).consumesAction()) {
+                    ap.itemUseCooldown = 3;
+                    return true;
+                }
+            }
+            return false;
+        }
 
         public final boolean preventSpectator;
 

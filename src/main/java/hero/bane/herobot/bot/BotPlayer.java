@@ -37,6 +37,7 @@ import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.boss.enderdragon.EnderDragonPart;
@@ -90,7 +91,7 @@ public class BotPlayer extends ServerPlayer {
     public double spawnYaw;
 
     // Returns true if it was successful, false if it couldn't spawn due to the player not existing in Mojang servers
-    public static boolean createFake(String username, MinecraftServer server, Vec3 pos, double yaw, double pitch, ResourceKey<Level> dimensionId, GameType gamemode, boolean flying) {
+    public static int createFake(String username, MinecraftServer server, Vec3 pos, double yaw, double pitch, ResourceKey<Level> dimensionId, GameType gamemode, boolean flying) {
         //prolly half of that crap is not necessary, but it works
         ServerLevel worldIn = server.getLevel(dimensionId);
         server.services().nameToIdCache().resolveOfflineUsers(false);
@@ -103,7 +104,7 @@ public class BotPlayer extends ServerPlayer {
             uuid = UUIDUtil.createOfflinePlayerUUID(username);
         }
         if (uuid == null) {
-            return false; // no uuid, no player
+            return 0; // no uuid, no player
         }
         gameprofile = new GameProfile(uuid, username);
 
@@ -158,11 +159,10 @@ public class BotPlayer extends ServerPlayer {
             instance.spawnYaw = yaw;
             server.getPlayerList().broadcastAll(new ClientboundRotateHeadPacket(instance, (byte) (instance.yHeadRot * 256 / 360)), dimensionId);//instance.dimension);
             server.getPlayerList().broadcastAll(ClientboundEntityPositionSyncPacket.of(instance), dimensionId);//instance.dimension);
-            // TODO: Add commands to toggle/set specific skin parts and left/right handedness (idk the word)
             instance.entityData.set(DATA_PLAYER_MODE_CUSTOMISATION, (byte) 0x7f); // show all model layers (incl. capes)
             instance.getAbilities().flying = flying;
         }, server);
-        return true;
+        return 1;
     }
 
     private static CompletableFuture<GameProfile> fetchGameProfile(MinecraftServer server, final UUID name) {
@@ -242,6 +242,27 @@ public class BotPlayer extends ServerPlayer {
     private BotPlayer(MinecraftServer server, ServerLevel worldIn, GameProfile profile, ClientInformation cli, boolean shadow) {
         super(server, worldIn, profile, cli);
         this.isAShadow = shadow;
+    }
+
+    public static final byte SKIN_CAPE = 0x01;
+    public static final byte SKIN_JACKET = 0x02;
+    public static final byte SKIN_LEFT_SLEEVE = 0x04;
+    public static final byte SKIN_RIGHT_SLEEVE = 0x08;
+    public static final byte SKIN_LEFT_PANT = 0x10;
+    public static final byte SKIN_RIGHT_PANT = 0x20;
+    public static final byte SKIN_HAT = 0x40;
+
+    public void toggleSkinPart(byte mask) {
+        byte current = this.entityData.get(DATA_PLAYER_MODE_CUSTOMISATION);
+        this.entityData.set(DATA_PLAYER_MODE_CUSTOMISATION, (byte) (current ^ mask));
+    }
+
+    public boolean isSkinPartEnabled(byte mask) {
+        return (this.entityData.get(DATA_PLAYER_MODE_CUSTOMISATION) & mask) != 0;
+    }
+
+    public void setMainHand(HumanoidArm arm) {
+        this.entityData.set(DATA_PLAYER_MAIN_HAND, arm);
     }
 
     @Override
@@ -337,7 +358,7 @@ public class BotPlayer extends ServerPlayer {
         }
     }
 
-    private int delayTicks() {
+    public int delayTicks() {
         int pingToTicks = HeroBotSettings.botPingToTicks;
         int remainder = ping % pingToTicks;
         if (remainder == 0) {

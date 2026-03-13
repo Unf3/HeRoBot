@@ -51,7 +51,7 @@ public abstract class LivingEntityMixin extends Entity {
 
     @Inject(method = "canUsePortal", at = @At("HEAD"), cancellable = true)
     private void canChangeDimensions(CallbackInfoReturnable<Boolean> cir) {
-        if (HeroBotSettings.isCreativeFlying(this)) {
+        if (HeroBotSettings.isCreativeNoClipFlying(this)) {
             cir.setReturnValue(false);
         }
     }

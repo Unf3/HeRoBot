@@ -20,6 +20,7 @@
     "LivingEntityMixin",
     "PlayerListMixin",
     "PlayerMixin",
+    "ProjectileMixin",
     "RideCommandMixin",
     "ServerExplosionMixin",
     "ServerPlayerAccessor",

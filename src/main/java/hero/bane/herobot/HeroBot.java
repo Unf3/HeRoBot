@@ -25,6 +25,7 @@ public class HeroBot implements ModInitializer {
             DistanceCommand.register(dispatcher, registryAccess);
             HeroBotCommand.register(dispatcher, registryAccess);
             DelayedCommand.register(dispatcher, registryAccess);
+            ChunkResetterCommand.register(dispatcher, registryAccess);
         });
 
         ServerLifecycleEvents.SERVER_STARTED.register(server -> currentServer = server);

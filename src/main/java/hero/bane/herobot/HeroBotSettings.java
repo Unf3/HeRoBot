@@ -69,7 +69,7 @@ public final class HeroBotSettings {
     @Rule(desc = "Wind Charges won't activate redstone blocks")
     public static boolean windChargeNoTrigger = false;
 
-    public static boolean isCreativeFlying(Entity entity) {
+    public static boolean isCreativeNoClipFlying(Entity entity) {
         return creativeNoClip && entity instanceof Player player && player.isCreative() && player.getAbilities().flying;
     }
 
@@ -78,4 +78,19 @@ public final class HeroBotSettings {
 
     @Rule(desc = "Change the ping to tick conversion for Bot Players (default 25)")
     public static int botPingToTicks = 25;
+
+    @Rule(desc = "[Experimental] Makes left clicks (attack) delayed by the bot's ping")
+    public static boolean botLagAttacks = false;
+
+    @Rule(desc = "[Experimental] Makes right clicks (use) delayed by the bot's ping")
+    public static boolean botLagUses = false;
+
+    @Rule(desc = "Removes randomness from projectiles while true")
+    public static boolean noProjectileRandom = false;
+
+    @Rule(desc = "Chunk Resetting deletes entities within that chunk")
+    public static boolean deleteChunkEntities = false;
+
+    @Rule(desc = "Disable moving piston blocks block rain from falling down")
+    public static boolean rainThroughMovingPiston = false;
 }

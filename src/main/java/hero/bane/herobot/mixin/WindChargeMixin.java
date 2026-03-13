@@ -19,6 +19,6 @@ public abstract class WindChargeMixin {
             index = 8
     )
     private ExplosionInteraction windChargeNoTrigger(ExplosionInteraction original) {
-        return HeroBotSettings.windChargeNoTrigger ? ExplosionInteraction.MOB : original;
+        return HeroBotSettings.windChargeNoTrigger ? ExplosionInteraction.NONE : original;
     }
 }

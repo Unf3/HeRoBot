@@ -25,6 +25,7 @@ import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.LinkedHashSet;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -37,7 +38,7 @@ public class PlayerSpawnCommand {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher, CommandBuildContext ctx) {
         dispatcher.register(
                 literal("playerspawn")
-                        .requires(s -> !s.isPlayer() || s.getServer().getPlayerList().isOp(s.getPlayer().nameAndId()))
+                        .requires(s -> !s.isPlayer() || s.getServer().getPlayerList().isOp(Objects.requireNonNull(s.getPlayer()).nameAndId()))
                         .then(argument("player", StringArgumentType.word())
                                 .suggests((c, b) -> suggest(getNameSuggestions(c.getSource()), b))
                                 .executes(PlayerSpawnCommand::spawn)
@@ -141,7 +142,7 @@ public class PlayerSpawnCommand {
             flying = false;
         }
 
-        BotPlayer.createFake(
+        return BotPlayer.createFake(
                 name,
                 server,
                 pos,
@@ -151,7 +152,6 @@ public class PlayerSpawnCommand {
                 mode,
                 flying
         );
-        return 1;
     }
 
     private static int maxNameLength(MinecraftServer server) {
