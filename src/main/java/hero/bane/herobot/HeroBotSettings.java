@@ -93,4 +93,7 @@ public final class HeroBotSettings {
 
     @Rule(desc = "Disable moving piston blocks block rain from falling down")
     public static boolean rainThroughMovingPiston = false;
+
+    @Rule(desc = "Bots disconnect on death rather than respawning")
+    public static boolean botLeaveOnDeath = false;
 }

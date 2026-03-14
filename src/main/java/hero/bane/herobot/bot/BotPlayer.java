@@ -35,10 +35,7 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.entity.HumanoidArm;
-import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.boss.enderdragon.EnderDragonPart;
 import net.minecraft.world.entity.player.Player;
@@ -263,6 +260,16 @@ public class BotPlayer extends ServerPlayer {
 
     public void setMainHand(HumanoidArm arm) {
         this.entityData.set(DATA_PLAYER_MAIN_HAND, arm);
+    }
+
+    @Override
+    public void move(MoverType moverType, @NonNull Vec3 vec3) {
+        double oldX = this.getX();
+        double oldZ = this.getZ();
+        super.move(moverType, vec3);
+        float movedX = (float) (this.getX() - oldX);
+        float movedZ = (float) (this.getZ() - oldZ);
+        ((ServerPlayerInterface) this).getActionPack().updateAutoJump(movedX, movedZ);
     }
 
     @Override
@@ -593,6 +600,11 @@ public class BotPlayer extends ServerPlayer {
         super.die(cause);
 
         MinecraftServer server = ((ServerPlayerAccessor) this).getServer();
+
+        if(HeroBotSettings.botLeaveOnDeath) {
+            botPlayerDisconnect(Component.literal("Died"));
+            return;
+        }
 
         server.execute(() -> {
             this.connection.handleClientCommand(

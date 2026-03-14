@@ -1,6 +1,7 @@
 package hero.bane.herobot.client.mixin;
 
 import hero.bane.herobot.HeroBotSettings;
+import hero.bane.herobot.client.HeroBotClient;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
@@ -63,7 +64,7 @@ public abstract class LevelMixin {
 
     @Unique
     private static boolean isRainPassThroughOrMovingPiston(BlockState state) {
-        if (HeroBotSettings.rainThroughMovingPiston && state.is(Blocks.MOVING_PISTON)) {
+        if (HeroBotSettings.rainThroughMovingPiston && state.is(Blocks.MOVING_PISTON) && HeroBotClient.isHeroBotLoaded()) {
             return true;
         }
 

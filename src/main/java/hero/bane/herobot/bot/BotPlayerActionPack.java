@@ -14,14 +14,18 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.*;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.VoxelShape;
 
 import java.util.*;
+import java.util.stream.StreamSupport;
 
 public class BotPlayerActionPack {
     public final ServerPlayer player;
@@ -32,6 +36,8 @@ public class BotPlayerActionPack {
     private int blockHitDelay;
     private boolean isHittingBlock;
     private float curBlockDamageMP;
+    public boolean autoJump = false;
+    private int autoJumpTime;
 
     private boolean sneaking;
     private boolean sprinting;
@@ -160,10 +166,6 @@ public class BotPlayerActionPack {
         return look(player.getYRot() + yaw, player.getXRot() + pitch);
     }
 
-    public BotPlayerActionPack turn(Vec2 rotation) {
-        return turn(rotation.x, rotation.y);
-    }
-
     public BotPlayerActionPack lookInterpolated(float targetYaw, float targetPitch, int ticks) {
         if (ticks <= 0) return look(targetYaw, targetPitch);
         float clampedPitch = Mth.clamp(targetPitch, -90, 90);
@@ -259,6 +261,11 @@ public class BotPlayerActionPack {
     }
 
     public void onUpdate() {
+        if (autoJumpTime > 0) {
+            --autoJumpTime;
+            start(ActionType.JUMP, Action.once());
+        }
+
         if (lookInterpolation != null) {
             lookInterpolation.ticksRemaining--;
             if (lookInterpolation.ticksRemaining == 0) {
@@ -313,6 +320,122 @@ public class BotPlayerActionPack {
         if (strafing != 0.0F || player instanceof BotPlayer) {
             player.xxa = strafing * vel;
         }
+    }
+
+    // Most of the autojump is just straight from the LocalPlayer class
+    public void updateAutoJump(float f, float g) {
+        if (!canAutoJump()) return;
+
+        Vec3 startPos = player.position();
+        Vec3 endPos = startPos.add(f, 0.0, g);
+        Vec3 movement = new Vec3(f, 0.0, g);
+        float speed = player.getSpeed();
+        float movementLenSqr = (float) movement.lengthSqr();
+
+        if (movementLenSqr <= 0.001F) {
+            Vec2 moveVector = new Vec2(strafing, forward);
+            float xInput = speed * moveVector.x;
+            float zInput = speed * moveVector.y;
+            float sin = Mth.sin(player.getYRot() * ((float) Math.PI / 180F));
+            float cos = Mth.cos(player.getYRot() * ((float) Math.PI / 180F));
+            movement = new Vec3((double) (xInput * cos - zInput * sin), movement.y, (double) (zInput * cos + xInput * sin));
+            movementLenSqr = (float) movement.lengthSqr();
+            if (movementLenSqr <= 0.001F) {
+                return;
+            }
+        }
+
+        float invLen = Mth.invSqrt(movementLenSqr);
+        Vec3 movementDir = movement.scale(invLen);
+        Vec3 playerForward = player.getForward();
+        float forwardDot = (float) (playerForward.x * movementDir.x + playerForward.z * movementDir.z);
+        if (forwardDot < -0.15F) return;
+
+        CollisionContext collisionContext = CollisionContext.of(player);
+        BlockPos blockPos = BlockPos.containing(player.getX(), player.getBoundingBox().maxY, player.getZ());
+        if (!player.level().getBlockState(blockPos).getCollisionShape(player.level(), blockPos, collisionContext).isEmpty())
+            return;
+
+        blockPos = blockPos.above();
+        if (!player.level().getBlockState(blockPos).getCollisionShape(player.level(), blockPos, collisionContext).isEmpty())
+            return;
+
+        float maxStepHeight = 1.2F;
+        if (player.hasEffect(MobEffects.JUMP_BOOST)) {
+            maxStepHeight += (float) (Objects.requireNonNull(player.getEffect(MobEffects.JUMP_BOOST)).getAmplifier() + 1) * 0.75F;
+        }
+
+        float probeDistance = Math.max(speed * 7.0F, 1.0F / invLen);
+        Vec3 probeEnd = endPos.add(movementDir.scale((double) probeDistance));
+        float bbWidth = player.getBbWidth();
+        float bbHeight = player.getBbHeight();
+
+        AABB searchBox = (new AABB(startPos, probeEnd.add(0.0, bbHeight, 0.0))).inflate(bbWidth, 0.0, bbWidth);
+
+        Vec3 raisedStart = startPos.add(0.0, 0.51, 0.0);
+        Vec3 raisedEnd = probeEnd.add(0.0, 0.51, 0.0);
+
+        Vec3 side = movementDir.cross(new Vec3(0.0, 1.0, 0.0));
+        Vec3 halfWidth = side.scale(bbWidth * 0.5F);
+
+        Vec3 leftStart = raisedStart.subtract(halfWidth);
+        Vec3 leftEnd = raisedEnd.subtract(halfWidth);
+        Vec3 rightStart = raisedStart.add(halfWidth);
+        Vec3 rightEnd = raisedEnd.add(halfWidth);
+
+        Iterable<VoxelShape> collisions = player.level().getCollisions(player, searchBox);
+        Iterator<AABB> iterator = StreamSupport.stream(collisions.spliterator(), false)
+                .flatMap(shape -> shape.toAabbs().stream())
+                .iterator();
+
+        float obstacleTopY = Float.MIN_VALUE;
+
+        while (iterator.hasNext()) {
+            AABB hitBox = iterator.next();
+            if (hitBox.intersects(leftStart, leftEnd) || hitBox.intersects(rightStart, rightEnd)) {
+                obstacleTopY = (float) hitBox.maxY;
+                Vec3 center = hitBox.getCenter();
+                BlockPos obstaclePos = BlockPos.containing(center);
+
+                for (int u = 1; (float) u < maxStepHeight; ++u) {
+                    BlockPos abovePos = obstaclePos.above(u);
+                    VoxelShape aboveShape = player.level().getBlockState(abovePos).getCollisionShape(player.level(), abovePos, collisionContext);
+                    if (!aboveShape.isEmpty()) {
+                        obstacleTopY = (float) aboveShape.max(Direction.Axis.Y) + (float) abovePos.getY();
+                        if ((double) obstacleTopY - player.getY() > (double) maxStepHeight) {
+                            return;
+                        }
+                    }
+
+                    if (u > 1) {
+                        blockPos = blockPos.above();
+                        if (!player.level().getBlockState(blockPos).getCollisionShape(player.level(), blockPos, collisionContext).isEmpty()) {
+                            return;
+                        }
+                    }
+                }
+                break;
+            }
+        }
+
+        if (obstacleTopY != Float.MIN_VALUE) {
+            float stepHeight = (float) ((double) obstacleTopY - player.getY());
+            if (stepHeight > 0.5F && stepHeight <= maxStepHeight) {
+                autoJumpTime = 1;
+            }
+        }
+    }
+
+    public void attemptAutoJump() {
+        autoJumpTime = 1;
+    }
+
+    private boolean canAutoJump() {
+        return autoJump
+                && autoJumpTime <= 0
+                && player.onGround()
+                && !player.isPassenger()
+                && (forward != 0 || strafing != 0);
     }
 
     static HitResult getTarget(ServerPlayer player) {

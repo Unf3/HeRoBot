@@ -195,7 +195,14 @@ public class PlayerCommand {
                                         .then(makeSkinPartCommand("rightPant", BotPlayer.SKIN_RIGHT_PANT))
                                         .then(makeSkinPartCommand("hat", BotPlayer.SKIN_HAT)))
 
-                                // There's probably a better name for this but idk, like dexterity maybe? Dextrousness?? whatever
+                                .then(literal("autojump")
+                                        .executes(manipulation(BotPlayerActionPack::attemptAutoJump))
+                                        .then(literal("true")
+                                                .executes(c -> autoJump(c, true)))
+                                        .then(literal("false")
+                                                .executes(c -> autoJump(c, false))))
+
+                                // There's probably a better name for this but idk, like dexterity maybe? Dexterousness?? whatever
                                 .then(literal("handedness")
                                         .then(literal("left")
                                                 .executes(c -> setHandedness(c, true)))
@@ -372,6 +379,17 @@ public class PlayerCommand {
                     }
                     return 1;
                 });
+    }
+
+    private static int autoJump(CommandContext<CommandSourceStack> context, boolean value)
+            throws CommandSyntaxException {
+        for (BotPlayer bot : requireBotTargets(context)) {
+            BotPlayerActionPack ap = ((ServerPlayerInterface) bot).getActionPack();
+            ap.autoJump = value;
+            context.getSource().sendSuccess(() -> Component.literal(
+                    bot.getGameProfile().name() + ": Auto-Jump " + (value ? "on" : "off")), false);
+        }
+        return 1;
     }
 
     private static int setHandedness(CommandContext<CommandSourceStack> context, boolean leftHanded)

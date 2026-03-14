@@ -28,6 +28,8 @@ public final class RuleConfigIO {
     private static volatile File clientFile;
     private static volatile File worldFile;
 
+    public static Runnable onSettingsChanged = null;
+
     public static void initClient(File file) {
         clientFile = file;
         CLIENT_OVERRIDES.clear();
@@ -53,6 +55,7 @@ public final class RuleConfigIO {
         RuleEntry rule = RuleRegistry.get(ruleName);
         if (rule == null) return;
         rule.set(value);
+        notifySettingsChanged();
     }
 
     public static void setPermClient(String ruleName, Object value) {
@@ -64,6 +67,7 @@ public final class RuleConfigIO {
 
         if (clientFile != null) saveOverrides(clientFile, CLIENT_OVERRIDES);
         reapplyLayers();
+        notifySettingsChanged();
     }
 
     public static boolean setPermWorld(String ruleName, Object value) {
@@ -76,6 +80,7 @@ public final class RuleConfigIO {
 
         saveOverrides(worldFile, WORLD_OVERRIDES);
         reapplyLayers();
+        notifySettingsChanged();
         return true;
     }
 
@@ -83,6 +88,29 @@ public final class RuleConfigIO {
         RuleRegistry.applyDefaults();
         RuleRegistry.applyOverrides(CLIENT_OVERRIDES);
         RuleRegistry.applyOverrides(WORLD_OVERRIDES);
+    }
+
+    private static void notifySettingsChanged() {
+        if (onSettingsChanged != null) onSettingsChanged.run();
+    }
+
+    public static String serializeCurrentSettings() {
+        JsonObject json = new JsonObject();
+        for (Map.Entry<String, RuleEntry> e : RuleRegistry.all().entrySet()) {
+            json.add(e.getKey(), GSON.toJsonTree(e.getValue().get()));
+        }
+        return GSON.toJson(json);
+    }
+
+    public static void applyRemoteSettings(String jsonString) {
+        JsonObject json = GSON.fromJson(jsonString, JsonObject.class);
+        if (json == null) return;
+        for (Map.Entry<String, RuleEntry> e : RuleRegistry.all().entrySet()) {
+            JsonElement el = json.get(e.getKey());
+            if (el == null) continue;
+            Object value = GSON.fromJson(el, e.getValue().type);
+            if (value != null) e.getValue().set(value);
+        }
     }
 
     private static Map<String, Object> loadOverrides(File file) {

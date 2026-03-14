@@ -1,6 +1,7 @@
 package hero.bane.herobot.client.mixin;
 
 import hero.bane.herobot.HeroBotSettings;
+import hero.bane.herobot.client.HeroBotClient;
 import net.minecraft.client.Minecraft;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -13,7 +14,7 @@ public class MinecraftMixin
     @Inject(method = "getTickTargetMillis", at = @At("HEAD"), cancellable = true)
     private void onGetTickTargetMillis(final float f, final CallbackInfoReturnable<Float> cir)
     {
-        if (!HeroBotSettings.clientsIgnoreSlowTickRate) {
+        if (!HeroBotSettings.clientsIgnoreSlowTickRate && HeroBotClient.isHeroBotLoaded()) {
             cir.setReturnValue(f);
         }
     }
