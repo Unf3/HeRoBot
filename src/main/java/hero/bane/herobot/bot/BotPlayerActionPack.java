@@ -427,7 +427,10 @@ public class BotPlayerActionPack {
     }
 
     public void attemptAutoJump() {
-        autoJumpTime = 1;
+        boolean wasAutoJump = autoJump;
+        autoJump = true;
+        updateAutoJump(0, 0);
+        autoJump = wasAutoJump;
     }
 
     private boolean canAutoJump() {

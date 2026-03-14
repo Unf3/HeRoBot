@@ -374,8 +374,7 @@ public class PlayerCommand {
                     for (BotPlayer bot : requireBotTargets(c)) {
                         bot.toggleSkinPart(mask);
                         boolean enabled = bot.isSkinPartEnabled(mask);
-                        c.getSource().sendSuccess(() -> Component.literal(
-                                bot.getGameProfile().name() + ": " + name + " " + (enabled ? "shown" : "hidden")), false);
+                        c.getSource().sendSuccess(() -> Component.literal("Set " + bot.getGameProfile().name() + "'s " + name + " layer " + (enabled ? "on" : "off")), false);
                     }
                     return 1;
                 });
@@ -386,8 +385,7 @@ public class PlayerCommand {
         for (BotPlayer bot : requireBotTargets(context)) {
             BotPlayerActionPack ap = ((ServerPlayerInterface) bot).getActionPack();
             ap.autoJump = value;
-            context.getSource().sendSuccess(() -> Component.literal(
-                    bot.getGameProfile().name() + ": Auto-Jump " + (value ? "on" : "off")), false);
+            context.getSource().sendSuccess(() -> Component.literal("Set " + bot.getGameProfile().name() + "'s auto jump " + (value ? "on" : "off")), false);
         }
         return 1;
     }
@@ -398,8 +396,7 @@ public class PlayerCommand {
         String handName = leftHanded ? "left" : "right";
         for (BotPlayer bot : requireBotTargets(context)) {
             bot.setMainHand(arm);
-            context.getSource().sendSuccess(() -> Component.literal(
-                    bot.getGameProfile().name() + ": main hand set to " + handName), false);
+            context.getSource().sendSuccess(() -> Component.literal("Set " + bot.getGameProfile().name() + " to be " + (leftHanded ? "Left-Handed" : "Right-Handed")), false);
         }
         return 1;
     }

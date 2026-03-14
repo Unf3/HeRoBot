@@ -274,7 +274,7 @@ Action commands that make the bot perform player actions.
 <details>
 <summary><code>autojump</code></summary>
 
-Controls automatic jumping over one-block obstacles while moving.
+Controls automatic jumping over one-block obstacles while moving
 
 - `/player <targets> autojump` - attempts a single autojump (jumps if the bot is moving and would need to step up)
 - `/player <targets> autojump true` - enables continuous autojump
