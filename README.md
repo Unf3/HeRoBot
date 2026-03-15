@@ -2,7 +2,8 @@ This mod is made for datapack makers to make bots that can fight back
 
 The bots have a much higher parity with a vanilla client compared to carpet, with things like Auto-Jump and the spear working.
 
-# Incompatible With Carpet Mod and Carpet PVP
+--- 
+## Incompatible With Carpet Mod and Carpet PVP
 
 ---
 
@@ -221,6 +222,15 @@ Default: false
 
 </details>
 
+<details>
+<summary><code>disableExperimentalScreen</code></summary>
+
+Remove the experimental world setting. If set on the client, disables all experimental screens. If set on a world, only disables it for that world.
+
+Default: false
+
+</details>
+
 </details>
 
 ---
@@ -310,33 +320,33 @@ Sneaking slows movement to 30% speed. Using an item (non-spear) slows to 20% spe
 <details>
 <summary><code>look</code></summary>
 
-Controls where the bot is looking. Most look commands support `interpolate <ticks>` for smooth transitions over multiple ticks.
+Controls where the bot is looking. Most look commands support `delta <ticks>` for smooth transitions over multiple ticks.
 
 **Cardinal Directions**
 - `/player <targets> look north|south|east|west|up|down`
-- `/player <targets> look north interpolate <ticks>`
+- `/player <targets> look north delta <ticks>`
 
 **Exact Rotation**
 - `/player <targets> look <yaw> <pitch>`
-- `/player <targets> look <yaw> <pitch> interpolate <ticks>`
+- `/player <targets> look <yaw> <pitch> delta <ticks>`
 
 **Relative Turns**
 - `/player <targets> look left` - turns 90 degrees left
 - `/player <targets> look right` - turns 90 degrees right
 - `/player <targets> look back` - turns 180 degrees
 - `/player <targets> look relative <rotation>` - turns by the given relative rotation
-- All support `interpolate <ticks>`
+- All support `delta <ticks>`
 
 **Look at Position**
 - `/player <targets> look at <pos>`
-- `/player <targets> look at <pos> interpolate <ticks>`
+- `/player <targets> look at <pos> delta <ticks>`
 
 **Look at Entity**
 - `/player <targets> look upon <entity>` - looks at the entity's eyes (default)
 - `/player <targets> look upon <entity> eyes` - looks at the entity's eyes
 - `/player <targets> look upon <entity> feet` - looks at the entity's feet
 - `/player <targets> look upon <entity> closest` - looks at the closest point of the entity's hitbox
-- All support `interpolate <ticks>`
+- All support `delta <ticks>`
 
 **Random**
 - `/player <targets> look random` - looks in a random direction

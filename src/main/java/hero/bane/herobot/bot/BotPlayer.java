@@ -74,7 +74,6 @@ public class BotPlayer extends ServerPlayer {
 
     private final List<DelayedKnockback> pendingKnockbacks = new ArrayList<>();
 
-    //thought this was a clean way to do this (yes I said it twice frick you)
     private record DelayedExplosionKB(long tick, Vec3 explosionKB) {
     }
 
@@ -87,7 +86,7 @@ public class BotPlayer extends ServerPlayer {
     public Vec3 spawnPos;
     public double spawnYaw;
 
-    // Returns true if it was successful, false if it couldn't spawn due to the player not existing in Mojang servers
+    // Returns 1 if it was successful, 0 if it couldn't spawn
     public static int createFake(String username, MinecraftServer server, Vec3 pos, double yaw, double pitch, ResourceKey<Level> dimensionId, GameType gamemode, boolean flying) {
         //prolly half of that crap is not necessary, but it works
         ServerLevel worldIn = server.getLevel(dimensionId);

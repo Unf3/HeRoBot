@@ -80,7 +80,8 @@ public class PlayerSpawnCommand {
         names.add("Steve");
         names.add("Alex");
         names.add("TheobaldTheBot");
-        names.removeAll(source.getOnlinePlayerNames()); //It should have been this from the beginning, so you don't respawn a player that's already on :)
+        names.add("quantumbot");
+        names.removeAll(source.getOnlinePlayerNames()); // It should have been this from the beginning, so you don't respawn a player that's already on :)
         return names;
     }
 

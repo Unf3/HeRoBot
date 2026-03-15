@@ -96,4 +96,7 @@ public final class HeroBotSettings {
 
     @Rule(desc = "Bots disconnect on death rather than respawning")
     public static boolean botLeaveOnDeath = false;
+
+    @Rule(desc = "Remove the experimental world setting (if on client disables all, if on world, only disables it on this world)")
+    public static boolean disableExperimentalScreen = false;
 }

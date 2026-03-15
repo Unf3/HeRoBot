@@ -122,7 +122,7 @@ public class PlayerCommand {
                                         .then(literal("relative")
                                                 .then(argument("rotation", RotationArgument.rotation())
                                                         .executes(c -> lookRelative(c, 0))
-                                                        .then(literal("interpolate")
+                                                        .then(literal("delta")
                                                                 .then(argument("ticks", IntegerArgumentType.integer(1))
                                                                         .executes(c -> lookRelative(c, IntegerArgumentType.getInteger(c, "ticks")))))))
 
@@ -138,14 +138,14 @@ public class PlayerCommand {
                                                         .then(makeLookUponMode("eyes", LookMode.EYES))
                                                         .then(makeLookUponMode("feet", LookMode.FEET))
                                                         .then(makeLookUponMode("closest", LookMode.CLOSEST))
-                                                        .then(literal("interpolate")
+                                                        .then(literal("delta")
                                                                 .then(argument("ticks", IntegerArgumentType.integer(1))
                                                                         .executes(c -> lookUpon(c, LookMode.EYES, IntegerArgumentType.getInteger(c, "ticks")))))))
                                         .then(literal("at")
                                                 .then(argument("position", Vec3Argument.vec3())
                                                         .executes(c -> manipulate(c,
                                                                 ap -> ap.lookAt(Vec3Argument.getVec3(c, "position"))))
-                                                        .then(literal("interpolate")
+                                                        .then(literal("delta")
                                                                 .then(argument("ticks", IntegerArgumentType.integer(1))
                                                                         .executes(c -> manipulate(c,
                                                                                 ap -> ap.lookAt(Vec3Argument.getVec3(c, "position"),
@@ -155,7 +155,7 @@ public class PlayerCommand {
                                                         ap -> ap.look(
                                                                 RotationArgument.getRotation(c, "direction")
                                                                         .getRotation(c.getSource()))))
-                                                .then(literal("interpolate")
+                                                .then(literal("delta")
                                                         .then(argument("ticks", IntegerArgumentType.integer(1))
                                                                 .executes(c -> manipulate(c,
                                                                         ap -> ap.look(
@@ -322,7 +322,7 @@ public class PlayerCommand {
     private static LiteralArgumentBuilder<CommandSourceStack> makeLookDirectionCommand(String name, Direction direction) {
         return literal(name)
                 .executes(manipulation(ap -> ap.look(direction)))
-                .then(literal("interpolate")
+                .then(literal("delta")
                         .then(argument("ticks", IntegerArgumentType.integer(1))
                                 .executes(c -> manipulate(c,
                                         ap -> ap.look(direction, IntegerArgumentType.getInteger(c, "ticks"))))));
@@ -331,7 +331,7 @@ public class PlayerCommand {
     private static LiteralArgumentBuilder<CommandSourceStack> makeLookRelativeCommand(String name, float yaw) {
         return literal(name)
                 .executes(manipulation(ap -> ap.turn(yaw, (float) 0)))
-                .then(literal("interpolate")
+                .then(literal("delta")
                         .then(argument("ticks", IntegerArgumentType.integer(1))
                                 .executes(c -> manipulate(c,
                                         ap -> ap.turn(yaw, (float) 0, IntegerArgumentType.getInteger(c, "ticks"))))));
@@ -355,7 +355,7 @@ public class PlayerCommand {
     private static LiteralArgumentBuilder<CommandSourceStack> makeLookUponMode(String name, LookMode mode) {
         return literal(name)
                 .executes(c -> lookUpon(c, mode, 0))
-                .then(literal("interpolate")
+                .then(literal("delta")
                         .then(argument("ticks", IntegerArgumentType.integer(1))
                                 .executes(c -> lookUpon(c, mode, IntegerArgumentType.getInteger(c, "ticks")))));
     }
@@ -393,10 +393,9 @@ public class PlayerCommand {
     private static int setHandedness(CommandContext<CommandSourceStack> context, boolean leftHanded)
             throws CommandSyntaxException {
         HumanoidArm arm = leftHanded ? HumanoidArm.LEFT : HumanoidArm.RIGHT;
-        String handName = leftHanded ? "left" : "right";
         for (BotPlayer bot : requireBotTargets(context)) {
             bot.setMainHand(arm);
-            context.getSource().sendSuccess(() -> Component.literal("Set " + bot.getGameProfile().name() + " to be " + (leftHanded ? "Left-Handed" : "Right-Handed")), false);
+            context.getSource().sendSuccess(() -> Component.literal("Set " + bot.getGameProfile().name() + (leftHanded ? " Left-Handed" : " Right-Handed")), false);
         }
         return 1;
     }
