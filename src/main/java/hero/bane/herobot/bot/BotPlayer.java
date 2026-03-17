@@ -262,7 +262,7 @@ public class BotPlayer extends ServerPlayer {
     }
 
     @Override
-    public void move(MoverType moverType, @NonNull Vec3 vec3) {
+    public void move(@NonNull MoverType moverType, @NonNull Vec3 vec3) {
         double oldX = this.getX();
         double oldZ = this.getZ();
         super.move(moverType, vec3);
@@ -449,7 +449,10 @@ public class BotPlayer extends ServerPlayer {
 
     @Override
     public boolean hurtServer(@NonNull ServerLevel serverLevel, @NonNull DamageSource damageSource, float finalDamage) {
-        if (this.gameMode.getGameModeForPlayer() == GameType.CREATIVE || this.gameMode.getGameModeForPlayer() == GameType.SPECTATOR) {
+        if (
+                (this.gameMode.getGameModeForPlayer() == GameType.CREATIVE || this.gameMode.getGameModeForPlayer() == GameType.SPECTATOR) &&
+                        (damageSource != this.level().damageSources().fellOutOfWorld())
+        ) {
             return false;
         }
         if (damageSource.getDirectEntity() instanceof ThrowableItemProjectile) {
@@ -600,7 +603,7 @@ public class BotPlayer extends ServerPlayer {
 
         MinecraftServer server = ((ServerPlayerAccessor) this).getServer();
 
-        if(HeroBotSettings.botLeaveOnDeath) {
+        if (HeroBotSettings.botLeaveOnDeath) {
             botPlayerDisconnect(Component.literal("Died"));
             return;
         }
