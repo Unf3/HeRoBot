@@ -36,13 +36,20 @@ public class BotPathSettings {
 
     public BotPathSettings() {
         avoidedBlocks.add(Blocks.WATER);
+        avoidedBlocks.add(Blocks.BUBBLE_COLUMN);
+
         avoidedBlocks.add(Blocks.LAVA);
-        avoidedBlocks.add(Blocks.CACTUS);
-        avoidedBlocks.add(Blocks.SWEET_BERRY_BUSH);
-        avoidedBlocks.add(Blocks.COBWEB);
         avoidedBlocks.add(Blocks.MAGMA_BLOCK);
         avoidedBlocks.add(Blocks.FIRE);
         avoidedBlocks.add(Blocks.SOUL_FIRE);
+
+        avoidedBlocks.add(Blocks.CACTUS);
+        avoidedBlocks.add(Blocks.SWEET_BERRY_BUSH);
+        avoidedBlocks.add(Blocks.WITHER_ROSE);
+
+        avoidedBlocks.add(Blocks.COBWEB);
+        avoidedBlocks.add(Blocks.SCULK_SHRIEKER);
+
         avoidedBlocks.add(Blocks.RAIL);
         avoidedBlocks.add(Blocks.POWERED_RAIL);
         avoidedBlocks.add(Blocks.DETECTOR_RAIL);
