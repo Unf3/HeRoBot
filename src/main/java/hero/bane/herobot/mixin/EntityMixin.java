@@ -35,7 +35,7 @@ public abstract class EntityMixin {
 
     @Inject(method = "isLocalInstanceAuthoritative", at = @At("HEAD"), cancellable = true)
     private void isBotPlayer(CallbackInfoReturnable<Boolean> cir) {
-        if (getControllingPassenger() instanceof BotPlayer || (Object) this instanceof BotPlayer)
+        if ((Object) this instanceof BotPlayer || getControllingPassenger() instanceof BotPlayer)
             cir.setReturnValue(!level.isClientSide());
     }
 

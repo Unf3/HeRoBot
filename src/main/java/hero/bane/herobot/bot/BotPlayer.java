@@ -4,6 +4,7 @@ import com.mojang.authlib.GameProfile;
 import hero.bane.herobot.HeroBotSettings;
 import hero.bane.herobot.bot.connection.BotClientConnection;
 import hero.bane.herobot.bot.connection.ServerPlayerInterface;
+import hero.bane.herobot.bot.pathing.BotPathSettings;
 import hero.bane.herobot.mixin.LivingEntityAccessor;
 import hero.bane.herobot.mixin.ServerPlayerAccessor;
 import it.unimi.dsi.fastutil.doubles.DoubleDoubleImmutablePair;
@@ -64,7 +65,7 @@ import java.util.concurrent.*;
 @SuppressWarnings("EntityConstructor")
 public class BotPlayer extends ServerPlayer {
     private static final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
-    private static final Set<String> spawning = new HashSet<>();
+    private static final Set<String> spawning = ConcurrentHashMap.newKeySet();
 
     public int ping = 0;
 
@@ -85,6 +86,31 @@ public class BotPlayer extends ServerPlayer {
 
     public Vec3 spawnPos;
     public double spawnYaw;
+
+    private BotPathing pathFollower;
+    private final BotPathSettings pathSettings = new BotPathSettings();
+
+    public BotPathSettings getPathSettings() {
+        return pathSettings;
+    }
+
+    public void setPathFollower(BotPathing follower) {
+        if (this.pathFollower != null) {
+            this.pathFollower.stop();
+        }
+        this.pathFollower = follower;
+    }
+
+    public BotPathing getPathFollower() {
+        return pathFollower;
+    }
+
+    public void clearPathFollower() {
+        if (this.pathFollower != null) {
+            this.pathFollower.stop();
+            this.pathFollower = null;
+        }
+    }
 
     // Returns 1 if it was successful, 0 if it couldn't spawn
     public static int createFake(String username, MinecraftServer server, Vec3 pos, double yaw, double pitch, ResourceKey<Level> dimensionId, GameType gamemode, boolean flying) {
@@ -313,6 +339,13 @@ public class BotPlayer extends ServerPlayer {
 
             processPendingKBs();
             handleSpear(); //not sure where else to put it so here it goes [maybe onUpdate would be better, but this is easier]
+
+            if (pathFollower != null) {
+                pathFollower.tick();
+                if (pathFollower.isDone()) {
+                    pathFollower = null;
+                }
+            }
         } catch (NullPointerException ignored) {
             // happens with that paper port thingy - not sure what that would fix, but hey
             // the game not gonna crash violently.
@@ -322,24 +355,22 @@ public class BotPlayer extends ServerPlayer {
     private void processPendingKBs() {
         long currentTick = this.level().getServer().getTickCount();
         if (!pendingKnockbacks.isEmpty()) {
-            var i = pendingKnockbacks.iterator();
-            while (i.hasNext()) {
-                DelayedKnockback kb = i.next();
+            pendingKnockbacks.removeIf(kb -> {
                 if (currentTick >= kb.tick()) {
                     super.knockback(kb.strength(), kb.x(), kb.z());
-                    i.remove();
+                    return true;
                 }
-            }
+                return false;
+            });
         }
         if (!pendingExplosionKB.isEmpty()) {
-            var i = pendingExplosionKB.iterator();
-            while (i.hasNext()) {
-                DelayedExplosionKB dp = i.next();
+            pendingExplosionKB.removeIf(dp -> {
                 if (currentTick >= dp.tick()) {
                     super.push(dp.explosionKB());
-                    i.remove();
+                    return true;
                 }
-            }
+                return false;
+            });
         }
     }
 
@@ -361,6 +392,10 @@ public class BotPlayer extends ServerPlayer {
         } else {
             long executeAt = this.level().getServer().getTickCount() + delayTicks;
             pendingKnockbacks.add(new DelayedKnockback(executeAt, strength, x, z));
+        }
+        // Recalculate path after knockback
+        if (pathFollower != null && !pathFollower.isDone()) {
+            pathFollower.recalcPath();
         }
     }
 
@@ -582,6 +617,11 @@ public class BotPlayer extends ServerPlayer {
             Entity attackingEntity = damageSource.getEntity();
             if (attackingEntity instanceof ServerPlayer serverPlayer) {
                 CriteriaTriggers.PLAYER_HURT_ENTITY.trigger(serverPlayer, this, damageSource, originalDamage, finalDamage, blocked);
+            }
+
+            // Recalculate path after taking damage
+            if (damageExists && pathFollower != null && !pathFollower.isDone()) {
+                pathFollower.recalcPath();
             }
 
             return damageExists;

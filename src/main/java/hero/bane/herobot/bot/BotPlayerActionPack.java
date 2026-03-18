@@ -21,6 +21,7 @@ import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.*;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
@@ -43,6 +44,9 @@ public class BotPlayerActionPack {
     private boolean sprinting;
     private float forward;
     private float strafing;
+
+    private long lastJumpOnceTick = -100;
+    private boolean jumping;
 
     private int itemUseCooldown;
 
@@ -319,6 +323,21 @@ public class BotPlayerActionPack {
         }
         if (strafing != 0.0F || player instanceof BotPlayer) {
             player.xxa = strafing * vel;
+        }
+
+        if (player.getAbilities().flying && player instanceof BotPlayer) {
+            double verticalSpeed = 0.05 * 3.0; // Not putting HeroBotSettings.creativeFlySpeed here cause frick you
+            Vec3 dm = player.getDeltaMovement();
+            if (jumping && sneaking) {
+                // cancel out
+            } else if (jumping) {
+                player.setDeltaMovement(dm.add(0, verticalSpeed, 0));
+            } else if (sneaking) {
+                player.setDeltaMovement(dm.add(0, -verticalSpeed, 0));
+            }
+            if (jumping && actions.get(ActionType.JUMP) == null) {
+                jumping = false;
+            }
         }
     }
 
@@ -634,24 +653,47 @@ public class BotPlayerActionPack {
         JUMP(true) {
             @Override
             boolean execute(ServerPlayer player, Action action) {
+                BotPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+                long currentTick = player.level().getServer().getTickCount();
+
                 if (action.limit == 1) {
-                    if (player.onGround()) player.jumpFromGround();
+                    // Double space bar for flying
+                    if (player.getAbilities().mayfly && (currentTick - ap.lastJumpOnceTick) <= 7) {
+                        player.getAbilities().flying = !player.getAbilities().flying;
+                        player.onUpdateAbilities();
+                        ap.lastJumpOnceTick = -100; // reset so triple tap doesn't re-toggle
+                        return false;
+                    }
+                    ap.lastJumpOnceTick = currentTick;
 
-                    if (!player.onGround())
+                    if (player.getAbilities().flying) {
+                        // Move up for a tick while flying (idk what else to put here)
+                        ap.jumping = true;
+                    } else if (player.onGround()) {
+                        player.jumpFromGround();
+                    }
+
+                    if (!player.onGround() && !player.getAbilities().flying) {
                         player.tryToStartFallFlying();
-
+                    }
                 } else {
-                    if (!player.onGround())
-                        player.tryToStartFallFlying();
-
-                    player.setJumping(true);
+                    // Continuous jump
+                    if (player.getAbilities().flying) {
+                        ap.jumping = true;
+                    } else {
+                        if (!player.onGround())
+                            player.tryToStartFallFlying();
+                        player.setJumping(true);
+                    }
                 }
                 return false;
             }
 
             @Override
             void inactiveTick(ServerPlayer player, Action action) {
+                BotPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
                 player.setJumping(false);
+                ap.jumping = false;
             }
         },
         DROP_ITEM(true) {

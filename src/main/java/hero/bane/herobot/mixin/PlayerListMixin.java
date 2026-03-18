@@ -68,8 +68,10 @@ public abstract class PlayerListMixin {
             ServerPlayer oldPlayer,
             boolean alive
     ) {
-        if (oldPlayer instanceof BotPlayer) {
-            return BotPlayer.respawnFake(this.server, level, profile, cli);
+        if (oldPlayer instanceof BotPlayer oldBot) {
+            BotPlayer newBot = BotPlayer.respawnFake(this.server, level, profile, cli);
+            newBot.getPathSettings().copyFrom(oldBot.getPathSettings());
+            return newBot;
         }
         return new ServerPlayer(this.server, level, profile, cli);
     }
