@@ -55,6 +55,8 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.portal.TeleportTransition;
 import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.level.storage.TagValueInput;
+import net.minecraft.world.level.storage.ValueInput;
+import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.NonNull;
@@ -700,6 +702,18 @@ public class BotPlayer extends ServerPlayer {
             connection.player.hasChangedDimension();
         }
         return connection.player;
+    }
+
+    @Override
+    public void addAdditionalSaveData(@NonNull ValueOutput output) {
+        super.addAdditionalSaveData(output);
+        output.putInt("botPlayerPing", this.ping);
+    }
+
+    @Override
+    public void readAdditionalSaveData(@NonNull ValueInput input) {
+        super.readAdditionalSaveData(input);
+        this.ping = input.getIntOr("botPlayerPing", 0);
     }
 
     @Override
