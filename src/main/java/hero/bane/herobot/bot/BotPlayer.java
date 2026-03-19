@@ -66,7 +66,7 @@ import java.util.concurrent.*;
 
 @SuppressWarnings("EntityConstructor")
 public class BotPlayer extends ServerPlayer {
-    private static final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
+
     private static final Set<String> spawning = ConcurrentHashMap.newKeySet();
 
     public int ping = 0;
@@ -725,7 +725,7 @@ public class BotPlayer extends ServerPlayer {
             blocksAttacks.disable(serverLevel, this, f, itemStack);
             this.invulnerableTime = 20;
             if (HeroBotSettings.shieldStunning) {
-                executor.schedule(() -> this.invulnerableTime = 0, 1, TimeUnit.MILLISECONDS);
+                this.level().getServer().schedule(new TickTask(this.level().getServer().getTickCount() + 1, () -> this.invulnerableTime = 0));
             }
         }
     }

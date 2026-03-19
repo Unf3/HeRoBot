@@ -10,7 +10,6 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 import hero.bane.herobot.HeroBotSettings;
 import hero.bane.herobot.bot.BotPathing;
-import hero.bane.herobot.mixin.ServerCommonPacketListenerImplAccessor;
 import hero.bane.herobot.bot.BotPlayer;
 import hero.bane.herobot.bot.BotPlayerActionPack;
 import hero.bane.herobot.bot.BotPlayerActionPack.Action;
@@ -18,6 +17,8 @@ import hero.bane.herobot.bot.BotPlayerActionPack.ActionType;
 import hero.bane.herobot.bot.connection.ServerPlayerInterface;
 import hero.bane.herobot.bot.pathing.BotPathSettings;
 import hero.bane.herobot.bot.pathing.BotPathfinder;
+import hero.bane.herobot.mixin.PlayerAccessor;
+import hero.bane.herobot.mixin.ServerCommonPacketListenerImplAccessor;
 import hero.bane.herobot.util.ItemCooldown;
 import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSourceStack;
@@ -31,7 +32,9 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
@@ -41,10 +44,22 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
 
+import com.google.common.collect.ImmutableMultimap;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.mojang.authlib.GameProfile;
+import com.mojang.authlib.properties.Property;
+import com.mojang.authlib.properties.PropertyMap;
+
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -162,6 +177,10 @@ public class PlayerCommand {
                                                                                 ap -> ap.lookAt(Vec3Argument.getVec3(c, "position"),
                                                                                         IntegerArgumentType.getInteger(c, "ticks"))))))))
                                         .then(argument("direction", RotationArgument.rotation())
+                                                .suggests((c, b) -> {
+                                                    b.suggest("~ ~");
+                                                    return b.buildFuture();
+                                                })
                                                 .executes(c -> manipulate(c,
                                                         ap -> ap.look(
                                                                 RotationArgument.getRotation(c, "direction")
@@ -204,7 +223,9 @@ public class PlayerCommand {
                                         .then(makeSkinPartCommand("rightSleeve", BotPlayer.SKIN_RIGHT_SLEEVE))
                                         .then(makeSkinPartCommand("leftPant", BotPlayer.SKIN_LEFT_PANT))
                                         .then(makeSkinPartCommand("rightPant", BotPlayer.SKIN_RIGHT_PANT))
-                                        .then(makeSkinPartCommand("hat", BotPlayer.SKIN_HAT)))
+                                        .then(makeSkinPartCommand("hat", BotPlayer.SKIN_HAT))
+                                        .then(literal("forceload")
+                                                .executes(PlayerCommand::forceLoadSkin)))
 
                                 .then(literal("autojump")
                                         .executes(manipulation(BotPlayerActionPack::attemptAutoJump))
@@ -248,9 +269,7 @@ public class PlayerCommand {
                                                         .then(literal("sprint")
                                                                 .executes(c -> setMoveType(c, BotPathSettings.MoveType.SPRINT)))
                                                         .then(literal("sprintjump")
-                                                                .executes(c -> setMoveType(c, BotPathSettings.MoveType.SPRINT_JUMP)))
-                                                        .then(literal("sprint45")
-                                                                .executes(c -> setMoveType(c, BotPathSettings.MoveType.SPRINT_45))))
+                                                                .executes(c -> setMoveType(c, BotPathSettings.MoveType.SPRINT_JUMP))))
                                                 .then(literal("target")
                                                         .then(literal("horizontal")
                                                                 .executes(PlayerCommand::getMaxHorizontalDistance)
@@ -269,20 +288,19 @@ public class PlayerCommand {
                                                                 .executes(PlayerCommand::getNodeVerticalDistance)
                                                                 .then(argument("value", DoubleArgumentType.doubleArg(-1))
                                                                         .executes(PlayerCommand::setNodeVerticalDistance)))
-                                                        .then(literal("skippable")
-                                                                .executes(PlayerCommand::getNodeSkippable)
-                                                                .then(argument("value", IntegerArgumentType.integer(0))
-                                                                        .executes(PlayerCommand::setNodeSkippable)))
-                                                        .then(literal("spacing")
-                                                                .executes(PlayerCommand::getNodeSpacing)
-                                                                .then(argument("value", IntegerArgumentType.integer(1))
-                                                                        .executes(PlayerCommand::setNodeSpacing))))
+                                                )
                                                 .then(literal("stopFollowing")
                                                         .executes(PlayerCommand::getStopFollowing)
                                                         .then(literal("true")
                                                                 .executes(c -> setStopFollowing(c, true)))
                                                         .then(literal("false")
                                                                 .executes(c -> setStopFollowing(c, false))))
+                                                .then(literal("debug")
+                                                        .executes(PlayerCommand::getDebug)
+                                                        .then(literal("true")
+                                                                .executes(c -> setDebug(c, true)))
+                                                        .then(literal("false")
+                                                                .executes(c -> setDebug(c, false))))
                                                 .then(literal("cost")
                                                         .then(literal("horizontal")
                                                                 .executes(PlayerCommand::getHorizontalMoveCost)
@@ -481,6 +499,61 @@ public class PlayerCommand {
                 });
     }
 
+    private static int forceLoadSkin(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        var server = context.getSource().getServer();
+        for (BotPlayer bot : requireBotTargets(context)) {
+            String uuid = bot.getUUID().toString().replace("-", "");
+            String name = bot.getGameProfile().name();
+            context.getSource().sendSuccess(() -> Component.literal("Fetching skin for " + name + "..."), false);
+
+            CompletableFuture.supplyAsync(() -> {
+                try {
+                    HttpURLConnection connection = (HttpURLConnection) URI.create(
+                            "https://sessionserver.mojang.com/session/minecraft/profile/" + uuid + "?unsigned=false"
+                    ).toURL().openConnection();
+                    connection.setConnectTimeout(5000); //5s timeout, if you have 5000 ping to the internet, something's wrong
+                    connection.setReadTimeout(5000);
+                    if (connection.getResponseCode() != 200) return null;
+                    try (InputStreamReader reader = new InputStreamReader(connection.getInputStream())) {
+                        return JsonParser.parseReader(reader).getAsJsonObject();
+                    }
+                } catch (Exception e) {
+                    return null;
+                }
+            }).thenAcceptAsync(json -> {
+                if (json == null) {
+                    context.getSource().sendFailure(Component.literal("Failed to fetch skin for " + name));
+                    return;
+                }
+
+                ImmutableMultimap.Builder<String, Property> builder = ImmutableMultimap.builder();
+                JsonArray properties = json.getAsJsonArray("properties");
+                if (properties != null) {
+                    for (var element : properties) {
+                        JsonObject prop = element.getAsJsonObject();
+                        String propName = prop.get("name").getAsString();
+                        String value = prop.get("value").getAsString();
+                        String signature = prop.has("signature") ? prop.get("signature").getAsString() : null;
+                        builder.put(propName, new Property(propName, value, signature));
+                    }
+                }
+                GameProfile newProfile = new GameProfile(bot.getUUID(), name, new PropertyMap(builder.build()));
+                ((PlayerAccessor) bot).setGameProfile(newProfile);
+
+                var playerList = server.getPlayerList();
+                playerList.broadcastAll(new ClientboundPlayerInfoRemovePacket(List.of(bot.getUUID())));
+                playerList.broadcastAll(ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(List.of(bot)));
+
+                ServerLevel level = bot.level();
+                level.getChunkSource().removeEntity(bot);
+                level.getChunkSource().addEntity(bot);
+
+                context.getSource().sendSuccess(() -> Component.literal("Force-loaded skin for " + name), false);
+            }, server);
+        }
+        return 1;
+    }
+
     private static int autoJump(CommandContext<CommandSourceStack> context, boolean value)
             throws CommandSyntaxException {
         for (BotPlayer bot : requireBotTargets(context)) {
@@ -561,9 +634,8 @@ public class PlayerCommand {
                     "\n  final vertical: " + (s.getMaxVerticalDistance() < 0 ? "ground-seek" : s.getMaxVerticalDistance()) +
                     "\n  node horizontal: " + s.getNodeHorizontalDistance() +
                     "\n  node vertical: " + (s.getNodeVerticalDistance() < 0 ? "disabled" : s.getNodeVerticalDistance()) +
-                    "\n  node skippable: " + s.getMaxDownwardSkip() +
-                    "\n  node spacing: " + s.getNodeSpacing() +
                     "\n  stopFollowing: " + s.isStopFollowing() +
+                    "\n  debug: " + s.isDebug() +
                     "\n  cost horizontal: " + s.getHorizontalMoveCost() +
                     "\n  cost vertical: " + s.getVerticalMoveCost();
             context.getSource().sendSuccess(() -> Component.literal(msg), false);
@@ -704,40 +776,6 @@ public class PlayerCommand {
         return 1;
     }
 
-    private static int getNodeSkippable(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
-        for (BotPlayer bot : requireBotTargets(context)) {
-            int val = bot.getPathSettings().getMaxDownwardSkip();
-            context.getSource().sendSuccess(() -> Component.literal(bot.getGameProfile().name() + "'s node skippable: " + val + " (default: 2)"), false);
-        }
-        return 1;
-    }
-
-    private static int setNodeSkippable(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
-        int value = IntegerArgumentType.getInteger(context, "value");
-        for (BotPlayer bot : requireBotTargets(context)) {
-            bot.getPathSettings().setMaxDownwardSkip(value);
-            context.getSource().sendSuccess(() -> Component.literal("Set " + bot.getGameProfile().name() + "'s node skippable to " + value), false);
-        }
-        return 1;
-    }
-
-    private static int getNodeSpacing(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
-        for (BotPlayer bot : requireBotTargets(context)) {
-            int val = bot.getPathSettings().getNodeSpacing();
-            context.getSource().sendSuccess(() -> Component.literal(bot.getGameProfile().name() + "'s node spacing: " + val + " (default: 2)"), false);
-        }
-        return 1;
-    }
-
-    private static int setNodeSpacing(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
-        int value = IntegerArgumentType.getInteger(context, "value");
-        for (BotPlayer bot : requireBotTargets(context)) {
-            bot.getPathSettings().setNodeSpacing(value);
-            context.getSource().sendSuccess(() -> Component.literal("Set " + bot.getGameProfile().name() + "'s node spacing to " + value), false);
-        }
-        return 1;
-    }
-
     private static int getStopFollowing(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         for (BotPlayer bot : requireBotTargets(context)) {
             boolean val = bot.getPathSettings().isStopFollowing();
@@ -750,6 +788,22 @@ public class PlayerCommand {
         for (BotPlayer bot : requireBotTargets(context)) {
             bot.getPathSettings().setStopFollowing(value);
             context.getSource().sendSuccess(() -> Component.literal("Set " + bot.getGameProfile().name() + "'s stopFollowing to " + value), false);
+        }
+        return 1;
+    }
+
+    private static int getDebug(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        for (BotPlayer bot : requireBotTargets(context)) {
+            boolean val = bot.getPathSettings().isDebug();
+            context.getSource().sendSuccess(() -> Component.literal(bot.getGameProfile().name() + "'s debug: " + val + " (default: false)"), false);
+        }
+        return 1;
+    }
+
+    private static int setDebug(CommandContext<CommandSourceStack> context, boolean value) throws CommandSyntaxException {
+        for (BotPlayer bot : requireBotTargets(context)) {
+            bot.getPathSettings().setDebug(value);
+            context.getSource().sendSuccess(() -> Component.literal("Set " + bot.getGameProfile().name() + "'s debug to " + value), false);
         }
         return 1;
     }

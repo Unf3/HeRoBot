@@ -40,7 +40,7 @@ public final class HeroBotSettings {
     @Rule(desc = "Changes creative air drag (Default 0.09), how quickly the air stops the client while flying")
     public static double creativeFlyDrag = 0.09;
 
-    @Rule(desc = "Enables shield stunning, where the entity can be damaged immediately after the shield is disabled")
+    @Rule(desc = "Enables shield stunning, where the shielding player can be damaged immediately after the shield is disabled")
     public static boolean shieldStunning = false;
 
     @Rule(desc = "Enables editing player nbt, so you can directly edit values within a player's data")

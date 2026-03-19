@@ -14,22 +14,17 @@ import net.minecraft.world.level.Level;
 import org.objectweb.asm.Opcodes;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
-import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import net.minecraft.server.TickTask;
+
 import java.util.List;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 @Mixin(Player.class)
 public abstract class PlayerMixin extends LivingEntity {
-
-    @Unique
-    private static final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
 
     @Shadow
     protected abstract void touch(Entity entity);
@@ -87,7 +82,10 @@ public abstract class PlayerMixin extends LivingEntity {
 
         if (canDisableShield && HeroBotSettings.shieldStunning) {
             this.invulnerableTime = 20;
-            executor.schedule(() -> this.invulnerableTime = 0, 1, TimeUnit.MILLISECONDS);
+            var server = this.level().getServer();
+            if (server != null) {
+                server.schedule(new TickTask(server.getTickCount() + 1, () -> this.invulnerableTime = 0));
+            }
         }
     }
 

@@ -21,7 +21,6 @@ import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.*;
-import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
@@ -102,7 +101,6 @@ public class BotPlayerActionPack {
         Action previous = actions.remove(type);
         if (previous != null) type.stop(player, previous);
         actions.put(type, action);
-        type.start(player, action);
         return this;
     }
 
@@ -217,20 +215,12 @@ public class BotPlayerActionPack {
         return lookInterpolated(targetYaw, targetPitch, ticks);
     }
 
-    public BotPlayerActionPack look(float yaw, float pitch, int ticks) {
-        return lookInterpolated(yaw, pitch, ticks);
-    }
-
     public BotPlayerActionPack look(Vec2 rotation, int ticks) {
         return lookInterpolated(rotation.y, rotation.x, ticks);
     }
 
     public BotPlayerActionPack turn(float yaw, float pitch, int ticks) {
         return lookInterpolated(player.getYRot() + yaw, player.getXRot() + pitch, ticks);
-    }
-
-    public BotPlayerActionPack turn(Vec2 rotation, int ticks) {
-        return turn(rotation.x, rotation.y, ticks);
     }
 
     public BotPlayerActionPack lookAt(Vec3 position, int ticks) {
@@ -328,11 +318,9 @@ public class BotPlayerActionPack {
         if (player.getAbilities().flying && player instanceof BotPlayer) {
             double verticalSpeed = 0.05 * 3.0; // Not putting HeroBotSettings.creativeFlySpeed here cause frick you
             Vec3 dm = player.getDeltaMovement();
-            if (jumping && sneaking) {
-                // cancel out
-            } else if (jumping) {
+            if (jumping && !sneaking) {
                 player.setDeltaMovement(dm.add(0, verticalSpeed, 0));
-            } else if (sneaking) {
+            } else if (sneaking && !jumping) {
                 player.setDeltaMovement(dm.add(0, -verticalSpeed, 0));
             }
             if (jumping && actions.get(ActionType.JUMP) == null) {
@@ -341,7 +329,7 @@ public class BotPlayerActionPack {
         }
     }
 
-    // Most of the autojump is just straight from the LocalPlayer class
+    // Most of the autojump is just straight from net.minecraft.client.player.LocalPlayer
     public void updateAutoJump(float f, float g) {
         if (!canAutoJump()) return;
 
@@ -357,7 +345,7 @@ public class BotPlayerActionPack {
             float zInput = speed * moveVector.y;
             float sin = Mth.sin(player.getYRot() * ((float) Math.PI / 180F));
             float cos = Mth.cos(player.getYRot() * ((float) Math.PI / 180F));
-            movement = new Vec3((double) (xInput * cos - zInput * sin), movement.y, (double) (zInput * cos + xInput * sin));
+            movement = new Vec3(xInput * cos - zInput * sin, movement.y, zInput * cos + xInput * sin);
             movementLenSqr = (float) movement.lengthSqr();
             if (movementLenSqr <= 0.001F) {
                 return;
@@ -385,7 +373,7 @@ public class BotPlayerActionPack {
         }
 
         float probeDistance = Math.max(speed * 7.0F, 1.0F / invLen);
-        Vec3 probeEnd = endPos.add(movementDir.scale((double) probeDistance));
+        Vec3 probeEnd = endPos.add(movementDir.scale(probeDistance));
         float bbWidth = player.getBbWidth();
         float bbHeight = player.getBbHeight();
 
@@ -475,8 +463,8 @@ public class BotPlayerActionPack {
         player.connection.send(new ClientboundSetHeldSlotPacket(slot - 1));
     }
 
-    private static boolean handleSpearStab(ServerPlayer player) {
-        if (player.getAttackStrengthScale(0.5F) < 1.0F) return false;
+    private static void handleSpearStab(ServerPlayer player) {
+        if (player.getAttackStrengthScale(0.5F) < 1.0F) return;
         player.connection.handlePlayerAction(
                 new ServerboundPlayerActionPacket(
                         ServerboundPlayerActionPacket.Action.STAB,
@@ -485,7 +473,6 @@ public class BotPlayerActionPack {
                 )
         );
         player.resetLastActionTime();
-        return true;
     }
 
     public enum ActionType {
@@ -787,9 +774,6 @@ public class BotPlayerActionPack {
 
         ActionType(boolean preventSpectator) {
             this.preventSpectator = preventSpectator;
-        }
-
-        void start(ServerPlayer player, Action action) {
         }
 
         abstract boolean execute(ServerPlayer player, Action action);
