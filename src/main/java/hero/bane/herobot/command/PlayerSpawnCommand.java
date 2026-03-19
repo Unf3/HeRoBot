@@ -58,7 +58,7 @@ public class PlayerSpawnCommand {
                                                                                         )))))
                                                         .then(argument("cardinal", StringArgumentType.word())
                                                                 .suggests((c, b) -> suggest(
-                                                                        new String[]{"north", "south", "east", "west", "up", "down", "0 0"}, b))
+                                                                        new String[]{"north", "south", "east", "west", "up", "down", "~ ~"}, b))
                                                                 .executes(PlayerSpawnCommand::spawn)
                                                                 .then(literal("in")
                                                                         .then(argument("gamemode", GameModeArgument.gameMode())
@@ -107,7 +107,7 @@ public class PlayerSpawnCommand {
                 && profile != null
                 && !playerList.isWhiteListed(profile)
                 && source.isPlayer()
-                && !playerList.isOp(source.getPlayer().nameAndId())) {
+                && !playerList.isOp(Objects.requireNonNull(source.getPlayer()).nameAndId())) {
             return 0;
         }
 

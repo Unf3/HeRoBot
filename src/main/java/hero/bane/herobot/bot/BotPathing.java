@@ -5,15 +5,20 @@ import hero.bane.herobot.bot.pathing.BotPathSettings;
 import hero.bane.herobot.bot.pathing.BotPathfinder;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 public class BotPathing {
     private final BotPlayer bot;
+    private final BotPlayerActionPack actionPack;
     private final CommandSourceStack source;
     private final BotPathSettings settings;
 
@@ -28,13 +33,12 @@ public class BotPathing {
     private int recalcCd;
     private Vec3 lastRecalcTarget;
 
-    // 45 strafe stuff
-    private boolean fortyFiveStrafe;
-    private float preJumpYaw;
+    private Set<BlockPos> debugger;
 
     public BotPathing(BotPlayer bot, List<BlockPos> path, Vec3 target,
                       CommandSourceStack source, BotPathSettings settings) {
         this.bot = bot;
+        this.actionPack = ((ServerPlayerInterface) bot).getActionPack();
         this.path = path;
         this.target = target;
         this.source = source;
@@ -43,11 +47,13 @@ public class BotPathing {
         this.currentIndex = 0;
         this.stuckTime = 0;
         this.lastPos = bot.position();
+        initDebugNodes(path);
     }
 
     public BotPathing(BotPlayer bot, Entity targetEntity,
                       CommandSourceStack source, BotPathSettings settings) {
         this.bot = bot;
+        this.actionPack = ((ServerPlayerInterface) bot).getActionPack();
         this.targetEntity = targetEntity;
         this.target = computeEntityTarget(targetEntity, settings, bot);
         this.source = source;
@@ -61,6 +67,7 @@ public class BotPathing {
         if (this.path == null) {
             this.path = List.of();
         }
+        initDebugNodes(this.path);
     }
 
     public void recalcPath() {
@@ -71,6 +78,7 @@ public class BotPathing {
             this.path = newPath;
             this.currentIndex = 0;
             this.stuckTime = 0;
+            initDebugNodes(newPath);
         }
     }
 
@@ -92,11 +100,10 @@ public class BotPathing {
                     stop();
                     source.sendSuccess(() -> Component.literal(bot.getGameProfile().name() + " reached target entity"), false);
                 } else {
-                    BotPlayerActionPack ap = ((ServerPlayerInterface) bot).getActionPack();
-                    ap.setForward(0);
-                    ap.setSprinting(false);
+                    actionPack.setForward(0);
+                    actionPack.setSprinting(false);
                     Vec3 eyePos = targetEntity.getEyePosition();
-                    ap.lookAt(eyePos);
+                    actionPack.lookAt(eyePos);
                     setVerticalLook(eyePos);
                 }
                 return;
@@ -111,6 +118,7 @@ public class BotPathing {
                         this.path = newPath;
                         this.currentIndex = 0;
                         this.lastRecalcTarget = target;
+                        initDebugNodes(newPath);
                     }
                 }
                 recalcCd = 20;
@@ -125,9 +133,10 @@ public class BotPathing {
 
         while (currentIndex < path.size()) {
             BlockPos wp = path.get(currentIndex);
-            double hDist = BotPathfinder.closestHorizontalDistToBlock(wp, botPos);
+            double hDist = BotPathfinder.closestHDistToBlock(wp, botPos);
             double vDist = Math.abs(botPos.y - wp.getY());
             if (settings.isWithinNode(hDist, vDist)) {
+                spawnDebugReached(wp);
                 currentIndex++;
             } else {
                 break;
@@ -135,30 +144,30 @@ public class BotPathing {
         }
 
         if (currentIndex < path.size()) {
-            BlockPos wp = path.get(currentIndex);
-            if (botPos.y + 0.1 < wp.getY()) {
-                int maxSkip = settings.getMaxDownwardSkip();
-                int bestIndex = currentIndex;
-                for (int i = currentIndex + 1; i < path.size() && (i - currentIndex) <= maxSkip; i++) {
-                    BlockPos candidate = path.get(i);
-                    if (candidate.getY() <= botPos.y + 0.5) {
-                        bestIndex = i;
-                        break;
+            for (int i = path.size() - 1; i > currentIndex; i--) {
+                BlockPos futureWp = path.get(i);
+                double hDist = BotPathfinder.closestHDistToBlock(futureWp, botPos);
+                double vDist = Math.abs(botPos.y - futureWp.getY());
+                if (settings.isWithinNode(hDist, vDist)) {
+                    for (int j = currentIndex; j <= i; j++) {
+                        spawnDebugReached(path.get(j));
                     }
-                    if (candidate.getY() < wp.getY()) {
-                        bestIndex = i;
-                    }
+                    currentIndex = i + 1;
+                    break;
                 }
-                currentIndex = bestIndex;
             }
         }
 
-        BotPlayerActionPack ap = ((ServerPlayerInterface) bot).getActionPack();
-
-        if (fortyFiveStrafe && bot.onGround()) {
-            fortyFiveStrafe = false;
-            ap.setStrafing(0);
-            bot.setYRot(preJumpYaw);
+        if (currentIndex < path.size()) {
+            int bestIndex = currentIndex;
+            for (int i = currentIndex + 1; i < path.size() && (i - currentIndex) <= 2; i++) {
+                BlockPos candidate = path.get(i);
+                if (candidate.getY() <= botPos.y + 0.5) {
+                    bestIndex = i;
+                    break;
+                }
+            }
+            currentIndex = bestIndex;
         }
 
         if (currentIndex < path.size()) {
@@ -166,24 +175,29 @@ public class BotPathing {
             Vec3 waypointCenter = Vec3.atBottomCenterOf(waypoint);
 
             Vec3 verticalTarget = targetEntity != null ? targetEntity.getEyePosition() : waypointCenter;
-            if (!fortyFiveStrafe) {
-                ap.lookAt(new Vec3(waypointCenter.x, verticalTarget.y, waypointCenter.z));
-            }
+            actionPack.lookAt(new Vec3(waypointCenter.x, verticalTarget.y, waypointCenter.z));
             setVerticalLook(verticalTarget);
 
-            applyMoveType(ap, false, botPos, waypoint);
+            applyMoveType(false, botPos, waypoint);
 
-            if (waypoint.getY() > botPos.y + 0.5 && bot.onGround()) {
-                bot.jumpFromGround();
+            if (bot.onGround()) {
+                if (waypoint.getY() > botPos.y + 0.5) {
+                    bot.jumpFromGround();
+                } else if (waypoint.getY() < botPos.y - 0.5
+                        && settings.getMoveType() == BotPathSettings.MoveType.SPRINT_JUMP) {
+                    bot.jumpFromGround();
+                }
             }
         } else {
             Vec3 finalLook = targetEntity != null ? targetEntity.getEyePosition() : target;
-            ap.lookAt(new Vec3(target.x, finalLook.y, target.z));
+            actionPack.lookAt(new Vec3(target.x, finalLook.y, target.z));
             setVerticalLook(finalLook);
-            applyMoveType(ap, true, botPos, null);
+            applyMoveType(true, botPos, null);
         }
 
-        if (botPos.distanceToSqr(lastPos) < 0.001) {
+        tickDebugParticles();
+
+        if (horizontalDistanceSq(botPos, lastPos) < 0.001) {
             stuckTime++;
             if (stuckTime > 100) {
                 stop();
@@ -206,9 +220,8 @@ public class BotPathing {
         bot.setXRot(pitch);
     }
 
-    private boolean shouldAllowJump(Vec3 botPos, BlockPos currentWaypoint) {
-        double distToTarget = Math.sqrt(horizontalDistanceSq(botPos, target));
-        if (distToTarget <= 10.0) {
+    private boolean shouldAllowJump(double hDistSqToTarget, BlockPos currentWaypoint) {
+        if (hDistSqToTarget <= 100.0) {
             return false;
         }
 
@@ -220,51 +233,30 @@ public class BotPathing {
         return true;
     }
 
-    private void applyMoveType(BotPlayerActionPack ap, boolean finalApproach, Vec3 botPos, BlockPos currentWaypoint) {
+    private void applyMoveType(boolean finalApproach, Vec3 botPos, BlockPos currentWaypoint) {
         if (finalApproach) {
-            ap.setForward(1);
-            ap.setSprinting(false);
+            actionPack.setForward(1);
+            actionPack.setSprinting(false);
             return;
         }
 
-        boolean nearTarget = horizontalDistanceSq(botPos, target) <= 25.0;
+        double hDistSq = horizontalDistanceSq(botPos, target);
+        boolean nearTarget = hDistSq <= 25.0;
 
         switch (settings.getMoveType()) {
             case WALK -> {
-                ap.setForward(1);
-                ap.setSprinting(false);
+                actionPack.setForward(1);
+                actionPack.setSprinting(false);
             }
             case SPRINT -> {
-                ap.setForward(1);
-                ap.setSprinting(!nearTarget);
+                actionPack.setForward(1);
+                actionPack.setSprinting(!nearTarget);
             }
             case SPRINT_JUMP -> {
-                ap.setForward(1);
-                ap.setSprinting(!nearTarget);
-                if (!nearTarget && bot.onGround() && shouldAllowJump(botPos, currentWaypoint)) {
+                actionPack.setForward(1);
+                actionPack.setSprinting(!nearTarget);
+                if (!nearTarget && bot.onGround() && shouldAllowJump(hDistSq, currentWaypoint)) {
                     bot.jumpFromGround();
-                }
-            }
-            case SPRINT_45 -> {
-                ap.setForward(1);
-                ap.setSprinting(!nearTarget);
-                if (!nearTarget && bot.onGround() && shouldAllowJump(botPos, currentWaypoint)) {
-                    preJumpYaw = bot.getYRot();
-
-                    double yawRad = Math.toRadians(preJumpYaw);
-                    double forwardX = -Math.sin(yawRad);
-                    double forwardZ = Math.cos(yawRad);
-                    double toTargetX = target.x - botPos.x;
-                    double toTargetZ = target.z - botPos.z;
-                    double cross = forwardX * toTargetZ - forwardZ * toTargetX;
-                    boolean strafe45Left = cross > 0;
-                    float yawOffset = strafe45Left ? 45.0f : -45.0f;
-
-                    bot.jumpFromGround();
-                    fortyFiveStrafe = true;
-
-                    bot.setYRot(preJumpYaw + yawOffset);
-                    ap.setStrafing(strafe45Left ? 1 : -1);
                 }
             }
         }
@@ -291,14 +283,41 @@ public class BotPathing {
         return entity.position();
     }
 
+    private void initDebugNodes(List<BlockPos> pathNodes) {
+        if (!settings.isDebug()) {
+            debugger = null;
+            return;
+        }
+        if (debugger == null) {
+            debugger = new LinkedHashSet<>();
+        } else {
+            debugger.clear();
+        }
+        if (pathNodes != null) {
+            debugger.addAll(pathNodes);
+        }
+    }
+
+    private void tickDebugParticles() {
+        if (debugger == null || debugger.isEmpty()) return;
+        ServerLevel serverLevel = bot.level();
+        for (BlockPos pos : debugger) {
+            serverLevel.sendParticles(ParticleTypes.WAX_OFF, pos.getX() + 0.5, pos.getY() + 0.25, pos.getZ() + 0.5, 1, 0, 0, 0, 0);
+        }
+    }
+
+    private void spawnDebugReached(BlockPos pos) {
+        if (debugger == null || !debugger.remove(pos)) return;
+        ServerLevel serverLevel = bot.level();
+        serverLevel.sendParticles(ParticleTypes.WAX_ON, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, 5, 0.2, 0.5, 0.2, 0);
+    }
+
     public void stop() {
         if (done) return;
         done = true;
-        BotPlayerActionPack ap = ((ServerPlayerInterface) bot).getActionPack();
-        ap.setForward(0);
-        ap.setSprinting(false);
-        ap.setStrafing(0);
-        fortyFiveStrafe = false;
+        if (debugger != null) debugger.clear();
+        actionPack.setForward(0);
+        actionPack.setSprinting(false);
     }
 
     public boolean isDone() {

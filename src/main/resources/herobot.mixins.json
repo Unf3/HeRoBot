@@ -18,6 +18,7 @@
     "ItemCooldownsInterface",
     "LivingEntityAccessor",
     "LivingEntityMixin",
+    "PlayerAccessor",
     "PlayerListMixin",
     "PlayerMixin",
     "ProjectileMixin",

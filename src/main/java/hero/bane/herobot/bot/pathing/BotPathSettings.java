@@ -10,14 +10,13 @@ import java.util.Set;
 public class BotPathSettings {
 
     public enum MoveType {
-        WALK, SPRINT, SPRINT_JUMP, SPRINT_45;
+        WALK, SPRINT, SPRINT_JUMP;
 
         public String displayName() {
             return switch (this) {
                 case WALK -> "walk";
                 case SPRINT -> "sprint";
                 case SPRINT_JUMP -> "sprint-jump";
-                case SPRINT_45 -> "45 strafe jumps";
             };
         }
     }
@@ -28,11 +27,10 @@ public class BotPathSettings {
     private double maxVerticalDistance = 2.0;
     private double nodeHorizontalDistance = 0.5;
     private double nodeVerticalDistance = 1.0;
-    private int maxDownwardSkip = 2;
-    private int nodeSpacing = 2;
     private boolean stopFollowing = true;
     private double horizontalMoveCost = 1.0;
     private double verticalMoveCost = 1.5;
+    private boolean debug = false;
 
     public BotPathSettings() {
         avoidedBlocks.add(Blocks.WATER);
@@ -64,11 +62,10 @@ public class BotPathSettings {
         this.maxVerticalDistance = other.maxVerticalDistance;
         this.nodeHorizontalDistance = other.nodeHorizontalDistance;
         this.nodeVerticalDistance = other.nodeVerticalDistance;
-        this.maxDownwardSkip = other.maxDownwardSkip;
-        this.nodeSpacing = other.nodeSpacing;
         this.stopFollowing = other.stopFollowing;
         this.horizontalMoveCost = other.horizontalMoveCost;
         this.verticalMoveCost = other.verticalMoveCost;
+        this.debug = other.debug;
     }
 
     public boolean isNotAvoided(Block block) {
@@ -133,23 +130,6 @@ public class BotPathSettings {
         this.nodeVerticalDistance = value;
     }
 
-    public int getMaxDownwardSkip() {
-        return maxDownwardSkip;
-    }
-
-    public void setMaxDownwardSkip(int value) {
-        this.maxDownwardSkip = Math.max(0, value);
-    }
-
-    public int getNodeSpacing() {
-        return nodeSpacing;
-    }
-
-    public void setNodeSpacing(int value) {
-        if (value < 1) return;
-        this.nodeSpacing = value;
-    }
-
     public boolean isStopFollowing() {
         return stopFollowing;
     }
@@ -174,6 +154,14 @@ public class BotPathSettings {
     public void setVerticalMoveCost(double value) {
         if (value <= 0) return;
         this.verticalMoveCost = value;
+    }
+
+    public boolean isDebug() {
+        return debug;
+    }
+
+    public void setDebug(boolean value) {
+        this.debug = value;
     }
 
     public boolean isWithinTarget(double hDist, double vDist) {
