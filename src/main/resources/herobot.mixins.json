@@ -6,6 +6,7 @@
   "mixins": [
     "BlockItemMixin",
     "BlockMixin",
+    "BlocksAttacksMixin",
     "CachedUserNameToIdResolverMixin",
     "ConnectionAccessor",
     "CooldownInstanceInterface",

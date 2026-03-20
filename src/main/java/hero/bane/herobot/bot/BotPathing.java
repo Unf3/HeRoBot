@@ -28,6 +28,11 @@ public class BotPathing {
     private int stuckTime;
     private Vec3 lastPos;
     private boolean done;
+    private boolean retrying;
+    private BlockPos retryTarget;
+    private int retryNextIndex;
+    private double originalNodeDistance;
+    private boolean pendingRecalc;
 
     private final Entity targetEntity;
     private int recalcCd;
@@ -82,8 +87,19 @@ public class BotPathing {
         }
     }
 
+    public void requestRecalc() {
+        if (!done) {
+            pendingRecalc = true;
+        }
+    }
+
     public void tick() {
         if (done) return;
+
+        if (pendingRecalc && bot.onGround()) {
+            pendingRecalc = false;
+            recalcPath();
+        }
 
         Vec3 botPos = bot.position();
 
@@ -101,6 +117,7 @@ public class BotPathing {
                     source.sendSuccess(() -> Component.literal(bot.getGameProfile().name() + " reached target entity"), false);
                 } else {
                     actionPack.setForward(0);
+                    actionPack.setStrafing(0);
                     actionPack.setSprinting(false);
                     Vec3 eyePos = targetEntity.getEyePosition();
                     actionPack.lookAt(eyePos);
@@ -174,11 +191,30 @@ public class BotPathing {
             BlockPos waypoint = path.get(currentIndex);
             Vec3 waypointCenter = Vec3.atBottomCenterOf(waypoint);
 
+            Vec3 lookHorizontal;
+            if (currentIndex + 1 < path.size()) {
+                lookHorizontal = Vec3.atBottomCenterOf(path.get(currentIndex + 1));
+            } else {
+                lookHorizontal = targetEntity != null ? targetEntity.position() : target;
+            }
+
             Vec3 verticalTarget = targetEntity != null ? targetEntity.getEyePosition() : waypointCenter;
-            actionPack.lookAt(new Vec3(waypointCenter.x, verticalTarget.y, waypointCenter.z));
+            actionPack.lookAt(new Vec3(lookHorizontal.x, verticalTarget.y, lookHorizontal.z));
             setVerticalLook(verticalTarget);
 
             applyMoveType(false, botPos, waypoint);
+
+            double dx = waypointCenter.x - botPos.x;
+            double dz = waypointCenter.z - botPos.z;
+            double toWaypointAngle = Math.atan2(-dx, dz);
+            double facingAngle = Math.toRadians(bot.getYRot());
+            double relativeAngle = toWaypointAngle - facingAngle;
+            relativeAngle = Math.atan2(Math.sin(relativeAngle), Math.cos(relativeAngle));
+
+            float forward = (float) Math.cos(relativeAngle);
+            float strafe = (float) -Math.sin(relativeAngle);
+            actionPack.setForward(forward > 0 ? forward : 0);
+            actionPack.setStrafing(strafe);
 
             if (bot.onGround()) {
                 if (waypoint.getY() > botPos.y + 0.5) {
@@ -193,16 +229,39 @@ public class BotPathing {
             actionPack.lookAt(new Vec3(target.x, finalLook.y, target.z));
             setVerticalLook(finalLook);
             applyMoveType(true, botPos, null);
+            actionPack.setStrafing(0);
         }
 
         tickDebugParticles();
 
+        if (retrying && currentIndex > retryNextIndex) {
+            retrying = false;
+            retryTarget = null;
+            stuckTime = 0;
+            settings.setNodeHorizontalDistance(originalNodeDistance);
+        }
+
         if (horizontalDistanceSq(botPos, lastPos) < 0.001) {
             stuckTime++;
+            if (stuckTime == 50) {
+                actionPack.start(BotPlayerActionPack.ActionType.JUMP, BotPlayerActionPack.Action.once());
+            }
             if (stuckTime > 100) {
-                stop();
-                source.sendFailure(Component.literal(bot.getGameProfile().name() + " got stuck while pathing"));
-                return;
+                if (retrying) {
+                    retryTarget = null;
+                    settings.setNodeHorizontalDistance(originalNodeDistance);
+                    stop();
+                    source.sendFailure(Component.literal(bot.getGameProfile().name() + " got stuck while pathing"));
+                    return;
+                }
+                int prevIndex = Math.max(0, currentIndex - 1);
+                retryTarget = path.get(prevIndex);
+                retryNextIndex = currentIndex;
+                currentIndex = prevIndex;
+                retrying = true;
+                stuckTime = 0;
+                originalNodeDistance = settings.getNodeHorizontalDistance();
+                settings.setNodeHorizontalDistance(originalNodeDistance / 2.0);
             }
         } else {
             stuckTime = 0;
@@ -304,6 +363,9 @@ public class BotPathing {
         for (BlockPos pos : debugger) {
             serverLevel.sendParticles(ParticleTypes.WAX_OFF, pos.getX() + 0.5, pos.getY() + 0.25, pos.getZ() + 0.5, 1, 0, 0, 0, 0);
         }
+        if (retryTarget != null) {
+            serverLevel.sendParticles(ParticleTypes.HAPPY_VILLAGER, retryTarget.getX() + 0.5, retryTarget.getY() + 0.25, retryTarget.getZ() + 0.5, 1, 0, 0, 0, 0);
+        }
     }
 
     private void spawnDebugReached(BlockPos pos) {
@@ -317,6 +379,7 @@ public class BotPathing {
         done = true;
         if (debugger != null) debugger.clear();
         actionPack.setForward(0);
+        actionPack.setStrafing(0);
         actionPack.setSprinting(false);
     }
 

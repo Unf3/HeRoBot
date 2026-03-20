@@ -303,6 +303,12 @@ public class BotPlayerActionPack {
             }
         }
 
+        if ((forward != 0.0F || strafing != 0.0F) && player.getFoodData().getFoodLevel() < 3) {
+            player.setSprinting(false);
+        } else if (sprinting) {
+            player.setSprinting(true);
+        }
+
         float vel = sneaking ? 0.3F : 1.0F;
         vel *= (player.isUsingItem() &&
                 !player.getMainHandItem().has(DataComponents.KINETIC_WEAPON))

@@ -25,8 +25,8 @@ public class BotPathSettings {
     private MoveType moveType = MoveType.SPRINT;
     private double maxHorizontalDistance = 1.0;
     private double maxVerticalDistance = 2.0;
-    private double nodeHorizontalDistance = 0.5;
-    private double nodeVerticalDistance = 1.0;
+    private double nodeHorizontalDistance = 0.25; // just really needs to be less than 0.3 but this seems like a good number
+    private double nodeVerticalDistance = 0.5;
     private boolean stopFollowing = true;
     private double horizontalMoveCost = 1.0;
     private double verticalMoveCost = 1.5;

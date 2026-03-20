@@ -41,5 +41,9 @@ public class BotPlayerNetHandler extends ServerGamePacketListenerImpl {
             resetPosition();
             player.level().getChunkSource().move(player);
         }
+        BotPlayer botPlayer = (BotPlayer) player;
+        if (botPlayer.getPathFollower() != null) {
+            botPlayer.getPathFollower().requestRecalc();
+        }
     }
 }

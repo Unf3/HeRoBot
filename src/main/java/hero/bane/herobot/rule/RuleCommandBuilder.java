@@ -38,6 +38,14 @@ public final class RuleCommandBuilder {
                     );
                     return 1;
                 })
+                .then(literal("reset")
+                        .executes(c -> reset(c, Permanence.TEMP, Scope.CLIENT))
+                        .then(literal("temp").executes(c -> reset(c, Permanence.TEMP, Scope.WORLD))
+                                .then(literal("world").executes(c -> reset(c, Permanence.TEMP, Scope.WORLD)))
+                                .then(literal("client").executes(c -> reset(c, Permanence.TEMP, Scope.CLIENT))))
+                        .then(literal("perm").executes(c -> reset(c, Permanence.PERM, Scope.WORLD))
+                                .then(literal("world").executes(c -> reset(c, Permanence.PERM, Scope.WORLD)))
+                                .then(literal("client").executes(c -> reset(c, Permanence.PERM, Scope.CLIENT)))))
                 .then(buildValueNode());
     }
 
@@ -52,6 +60,8 @@ public final class RuleCommandBuilder {
                         b.suggest("false");
                     } else if (rule.type.isEnum()) {
                         for (String s : enumNames(rule.type)) b.suggest(s);
+                    } else {
+                        b.suggest(String.valueOf(rule.getDefaultValue()));
                     }
                     return b.buildFuture();
                 })
@@ -62,6 +72,34 @@ public final class RuleCommandBuilder {
                 .then(literal("perm").executes(c -> apply(c, Permanence.PERM, Scope.WORLD))
                         .then(literal("world").executes(c -> apply(c, Permanence.PERM, Scope.WORLD)))
                         .then(literal("client").executes(c -> apply(c, Permanence.PERM, Scope.CLIENT))));
+    }
+
+    private static int reset(CommandContext<CommandSourceStack> c, Permanence perm, Scope scope) {
+        RuleEntry rule = RuleRegistry.get(StringArgumentType.getString(c, "rule"));
+        if (rule == null) return 0;
+
+        Object defaultValue = rule.getDefaultValue();
+        rule.resetToDefault();
+
+        boolean saved = false;
+
+        if (perm == Permanence.TEMP) {
+            RuleConfigIO.setTemp(rule.name, defaultValue);
+        } else {
+            if (scope == Scope.CLIENT) {
+                RuleConfigIO.setPermClient(rule.name, defaultValue);
+                saved = true;
+            } else {
+                saved = RuleConfigIO.setPermWorld(rule.name, defaultValue);
+                if (!saved) {
+                    c.getSource().sendFailure(Component.literal("No world loaded, cannot write per-world rules"));
+                    return 0;
+                }
+            }
+        }
+
+        reply(c.getSource(), rule, defaultValue, perm, scope, saved);
+        return 1;
     }
 
     private static int apply(CommandContext<CommandSourceStack> c, Permanence perm, Scope scope) {

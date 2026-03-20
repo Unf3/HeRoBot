@@ -99,4 +99,7 @@ public final class HeroBotSettings {
 
     @Rule(desc = "Remove the experimental world setting (if on client disables all, if on world, only disables it on this world)")
     public static boolean disableExperimentalScreen = false;
+
+    @Rule(desc = "Change the delay of bringing up the shield")
+    public static int shieldDelayTicks = 5;
 }

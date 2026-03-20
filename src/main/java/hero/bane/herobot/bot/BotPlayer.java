@@ -621,9 +621,9 @@ public class BotPlayer extends ServerPlayer {
                 CriteriaTriggers.PLAYER_HURT_ENTITY.trigger(serverPlayer, this, damageSource, originalDamage, finalDamage, blocked);
             }
 
-            // Recalculate path after taking damage
-            if (damageExists && pathFollower != null && !pathFollower.isDone()) {
-                pathFollower.recalcPath();
+            // Recalculate path after taking damage (waits until on ground)
+            if (damageExists && pathFollower != null) {
+                pathFollower.requestRecalc();
             }
 
             return damageExists;

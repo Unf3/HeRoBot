@@ -10,14 +10,15 @@ public class HeroBotClient implements ClientModInitializer {
 
     private static boolean heroBotLoaded = false;
 
+    // we're not creating a new thing that needs closing
+    @SuppressWarnings("resource")
     @Override
     public void onInitializeClient() {
-        ClientPlayNetworking.registerGlobalReceiver(HeroBotSyncPayload.TYPE, (payload, context) -> {
-            context.client().execute(() -> {
-                RuleConfigIO.applyRemoteSettings(payload.settingsJson());
-                heroBotLoaded = true;
-            });
-        });
+        ClientPlayNetworking.registerGlobalReceiver(HeroBotSyncPayload.TYPE, (payload, context) ->
+                context.client().execute(() -> {
+                    RuleConfigIO.applyRemoteSettings(payload.settingsJson());
+                    heroBotLoaded = true;
+                }));
 
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
             heroBotLoaded = false;
