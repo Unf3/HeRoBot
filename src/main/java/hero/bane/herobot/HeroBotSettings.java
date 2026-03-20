@@ -43,6 +43,9 @@ public final class HeroBotSettings {
     @Rule(desc = "Enables shield stunning, where the shielding player can be damaged immediately after the shield is disabled")
     public static boolean shieldStunning = false;
 
+    @Rule(desc = "Change the delay of bringing up the shield")
+    public static int shieldDelayTicks = 5;
+
     @Rule(desc = "Enables editing player nbt, so you can directly edit values within a player's data")
     public static boolean editablePlayerNbt = false;
 
@@ -99,7 +102,4 @@ public final class HeroBotSettings {
 
     @Rule(desc = "Remove the experimental world setting (if on client disables all, if on world, only disables it on this world)")
     public static boolean disableExperimentalScreen = false;
-
-    @Rule(desc = "Change the delay of bringing up the shield")
-    public static int shieldDelayTicks = 5;
 }

@@ -62,7 +62,9 @@ import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.NonNull;
 
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 
 @SuppressWarnings("EntityConstructor")
 public class BotPlayer extends ServerPlayer {
@@ -427,7 +429,7 @@ public class BotPlayer extends ServerPlayer {
         int effChargeTicks = used - kineticWeapon.delayTicks();
 
         Vec3 look = this.getLookAngle();
-        Vec3 attackerMotion = this.getDeltaMovement().scale(20.0); //Cause velocity is bugged, it should be getKnownSpeed but getKnownSpeed is always 0 for some reason
+        Vec3 attackerMotion = this.getDeltaMovement().scale(20.0); // Cause velocity is bugged, it should be getKnownSpeed but getKnownSpeed is always 0 for some reason
         double attackerDot = look.dot(attackerMotion);
         double baseDamage = this.getAttributeBaseValue(Attributes.ATTACK_DAMAGE);
 
@@ -517,6 +519,25 @@ public class BotPlayer extends ServerPlayer {
             float blockedDamage = this.applyItemBlocking(serverLevel, damageSource, finalDamage);
             finalDamage -= blockedDamage;
             boolean blocked = blockedDamage > 0.0F;
+
+            // Shield stunning final implementation :suffering:
+            if (blocked && HeroBotSettings.shieldStunning) {
+                CriteriaTriggers.ENTITY_HURT_PLAYER.trigger(this, damageSource, originalDamage, finalDamage, true);
+                if (blockedDamage < Float.MAX_VALUE) {
+                    this.awardStat(Stats.DAMAGE_BLOCKED_BY_SHIELD, Math.round(blockedDamage * 10.0F));
+                }
+                Entity attackingEntity = damageSource.getEntity();
+                if (attackingEntity instanceof ServerPlayer serverPlayer) {
+                    CriteriaTriggers.PLAYER_HURT_ENTITY.trigger(serverPlayer, this, damageSource, originalDamage, finalDamage, true);
+                }
+
+                BlocksAttacks blocksAttacks = this.getUseItem().get(DataComponents.BLOCKS_ATTACKS);
+                if (blocksAttacks != null) {
+                    blocksAttacks.onBlocked(serverLevel, this);
+                }
+                return false;
+            }
+
             if (damageSource.is(DamageTypeTags.IS_FREEZING) && this.getType().is(EntityTypeTags.FREEZE_HURTS_EXTRA_TYPES)) {
                 finalDamage *= 5.0F;
             }
@@ -543,21 +564,25 @@ public class BotPlayer extends ServerPlayer {
                 this.lastHurt = finalDamage;
                 this.invulnerableTime = 20;
                 this.actuallyHurt(serverLevel, damageSource, finalDamage);
-                this.hurtDuration = 10;
-                this.hurtTime = this.hurtDuration;
+                if (!blocked) {
+                    this.hurtDuration = 10;
+                    this.hurtTime = this.hurtDuration;
+                }
             }
 
             this.resolveMobResponsibleForDamage(damageSource);
             this.resolvePlayerResponsibleForDamage(damageSource);
             if (cleanHit) {
-                BlocksAttacks blocksAttacks = this.getUseItem().get(DataComponents.BLOCKS_ATTACKS);
-                if (blocked && blocksAttacks != null) {
-                    blocksAttacks.onBlocked(serverLevel, this);
+                if (blocked) {
+                    BlocksAttacks blocksAttacks = this.getUseItem().get(DataComponents.BLOCKS_ATTACKS);
+                    if (blocksAttacks != null) {
+                        blocksAttacks.onBlocked(serverLevel, this);
+                    }
                 } else {
                     serverLevel.broadcastDamageEvent(this, damageSource);
                 }
 
-                if (!damageSource.is(DamageTypeTags.NO_IMPACT) && (!blocked || finalDamage > 0.0F)) {
+                if (!blocked && !damageSource.is(DamageTypeTags.NO_IMPACT)) {
                     this.markHurt();
                 }
 
@@ -595,26 +620,20 @@ public class BotPlayer extends ServerPlayer {
                     throw new RuntimeException(e);
                 }
 
-            } else if (cleanHit && (!HeroBotSettings.shieldStunning || !blocked)) {
+            } else if (cleanHit) {
                 this.playHurtSound(damageSource);
                 ((LivingEntityAccessor) this).invokePlaySecondaryHurtSound(damageSource);
             }
 
-            boolean damageExists = !blocked || finalDamage > 0.0F;
-            if (damageExists) {
-                ((LivingEntityAccessor) this).setLastDamageSource(damageSource);
-                ((LivingEntityAccessor) this).setLastDamageStamp(this.level().getGameTime());
+            ((LivingEntityAccessor) this).setLastDamageSource(damageSource);
+            ((LivingEntityAccessor) this).setLastDamageStamp(this.level().getGameTime());
 
-                for (MobEffectInstance mobEffectInstance : this.getActiveEffects()) {
-                    mobEffectInstance.onMobHurt(serverLevel, this, damageSource, finalDamage);
-                }
+            for (MobEffectInstance mobEffectInstance : this.getActiveEffects()) {
+                mobEffectInstance.onMobHurt(serverLevel, this, damageSource, finalDamage);
             }
 
             ServerPlayer serverPlayer1 = this;
             CriteriaTriggers.ENTITY_HURT_PLAYER.trigger(serverPlayer1, damageSource, originalDamage, finalDamage, blocked);
-            if (blockedDamage > 0.0F && blockedDamage < 3.4028235E37F) {
-                serverPlayer1.awardStat(Stats.DAMAGE_BLOCKED_BY_SHIELD, Math.round(blockedDamage * 10.0F));
-            }
 
             Entity attackingEntity = damageSource.getEntity();
             if (attackingEntity instanceof ServerPlayer serverPlayer) {
@@ -622,11 +641,11 @@ public class BotPlayer extends ServerPlayer {
             }
 
             // Recalculate path after taking damage (waits until on ground)
-            if (damageExists && pathFollower != null) {
+            if (pathFollower != null) {
                 pathFollower.requestRecalc();
             }
 
-            return damageExists;
+            return !blocked;
         }
     }
 
@@ -678,12 +697,6 @@ public class BotPlayer extends ServerPlayer {
         return HeroBotSettings.allowListingBotPlayers;
     }
 
-    // Can be commented out since it runs fine without
-//    @Override
-//    protected void checkFallDamage(double y, boolean onGround, @NonNull BlockState state, @NonNull BlockPos pos) {
-//        doCheckFallDamage(0.0, y, 0.0, onGround);
-//    }
-
     @Override
     public boolean isInvulnerableTo(@NonNull ServerLevel serverLevel, @NonNull DamageSource damageSource) {
         return super.isInvulnerableTo(serverLevel, damageSource)
@@ -723,10 +736,6 @@ public class BotPlayer extends ServerPlayer {
         float f = livingEntity.getSecondsToDisableBlocking();
         if (f > 0.0F && blocksAttacks != null) {
             blocksAttacks.disable(serverLevel, this, f, itemStack);
-            this.invulnerableTime = 20;
-            if (HeroBotSettings.shieldStunning) {
-                this.level().getServer().schedule(new TickTask(this.level().getServer().getTickCount() + 1, () -> this.invulnerableTime = 0));
-            }
         }
     }
 }
