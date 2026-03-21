@@ -413,7 +413,6 @@ public class PlayerCommand {
         }
     }
 
-
     private enum LookMode {EYES, FEET, CLOSEST}
 
     private static int lookUpon(CommandContext<CommandSourceStack> context, LookMode mode, int ticks)

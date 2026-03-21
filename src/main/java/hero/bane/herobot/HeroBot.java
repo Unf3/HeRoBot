@@ -1,5 +1,7 @@
 package hero.bane.herobot;
 
+import hero.bane.herobot.bot.ml.BotMLCommand;
+import hero.bane.herobot.bot.ml.MLTrainingManager;
 import hero.bane.herobot.command.*;
 import hero.bane.herobot.networking.HeroBotSyncPayload;
 import hero.bane.herobot.rule.RuleConfigIO;
@@ -34,6 +36,7 @@ public class HeroBot implements ModInitializer {
             HeroBotCommand.register(dispatcher, registryAccess);
             DelayedCommand.register(dispatcher, registryAccess);
             ChunkResetterCommand.register(dispatcher, registryAccess);
+            BotMLCommand.register(dispatcher, registryAccess);
         });
 
         ServerLifecycleEvents.SERVER_STARTED.register(server -> currentServer = server);
@@ -45,7 +48,10 @@ public class HeroBot implements ModInitializer {
 
         RuleConfigIO.onSettingsChanged = HeroBot::syncSettingsToAllPlayers;
 
-        ServerTickEvents.END_SERVER_TICK.register(DelayedQueue::tick);
+        ServerTickEvents.END_SERVER_TICK.register(server -> {
+            DelayedQueue.tick(server);
+            MLTrainingManager.getInstance().tick(server);
+        });
     }
 
     public static void syncSettingsToPlayer(ServerPlayer player) {

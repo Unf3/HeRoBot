@@ -379,7 +379,7 @@ public class BotPlayer extends ServerPlayer {
     }
 
     public void delayedExplosionKB(Vec3 vec3) {
-        int delayTicks = delayTicks();
+        int delayTicks = delayTicks(2);
         if (delayTicks <= 0) {
             super.push(vec3);
         } else {
@@ -390,7 +390,7 @@ public class BotPlayer extends ServerPlayer {
 
     @Override
     public void knockback(double strength, double x, double z) {
-        int delayTicks = delayTicks();
+        int delayTicks = delayTicks(2);
         if (delayTicks <= 0) {
             super.knockback(strength, x, z);
         } else {
@@ -403,9 +403,9 @@ public class BotPlayer extends ServerPlayer {
         }
     }
 
-    public int delayTicks() {
+    public int delayTicks(int p2tMultiplier) {
         int pingToTicks = HeroBotSettings.botPingToTicks;
-        int remainder = ping % pingToTicks;
+        int remainder = ping % (pingToTicks * p2tMultiplier);
         if (remainder == 0) {
             return ping / pingToTicks;
         }

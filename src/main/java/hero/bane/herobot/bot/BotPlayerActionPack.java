@@ -27,6 +27,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import java.util.*;
 import java.util.stream.StreamSupport;
 
+@SuppressWarnings("UnusedReturnValue")
 public class BotPlayerActionPack {
     public final ServerPlayer player;
 
@@ -496,7 +497,7 @@ public class BotPlayerActionPack {
                 HitResult hit = getTarget(player);
 
                 if (player instanceof BotPlayer bot && HeroBotSettings.botLagUses) {
-                    int delay = bot.delayTicks();
+                    int delay = bot.delayTicks(1);
                     if (delay > 0) {
                         long executeAt = player.level().getServer().getTickCount() + delay;
                         ap.pendingActions.add(new DelayedAction(executeAt, () -> executeUse(player, hit)));
@@ -526,7 +527,7 @@ public class BotPlayerActionPack {
                     if (player.getAttackStrengthScale(0.5F) < 1.0F) return false;
 
                     if (player instanceof BotPlayer bot && HeroBotSettings.botLagAttacks) {
-                        int delay = bot.delayTicks();
+                        int delay = bot.delayTicks(1);
                         if (delay > 0) {
                             BotPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
                             long executeAt = player.level().getServer().getTickCount() + delay;
@@ -545,7 +546,7 @@ public class BotPlayerActionPack {
                         boolean continuous = action.isContinuous;
 
                         if (player instanceof BotPlayer bot && HeroBotSettings.botLagAttacks) {
-                            int delay = bot.delayTicks();
+                            int delay = bot.delayTicks(1);
                             if (delay > 0) {
                                 boolean wasSprinting = player.isSprinting();
                                 double savedFallDistance = player.fallDistance;

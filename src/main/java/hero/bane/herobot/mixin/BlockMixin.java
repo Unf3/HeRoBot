@@ -10,34 +10,28 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.ShulkerBoxBlock;
 import net.minecraft.world.level.gamerules.GameRules;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Overwrite;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.function.Supplier;
 
 @Mixin(Block.class)
 public abstract class BlockMixin {
 
-    /**
-     * @author HerobaneNair
-     * @reason Allows shulkers to be picked up even when tile drops are off
-     */
-    @Overwrite
-    private static void popResource(Level level, Supplier<ItemEntity> supplier, ItemStack itemStack) {
+    @Inject(method = "popResource(Lnet/minecraft/world/level/Level;Ljava/util/function/Supplier;Lnet/minecraft/world/item/ItemStack;)V", at = @At("HEAD"), cancellable = true)
+    private static void forceShulkerDrop(Level level, Supplier<ItemEntity> supplier, ItemStack itemStack, CallbackInfo ci) {
         if (!(level instanceof ServerLevel serverLevel)) return;
-        if (itemStack.isEmpty()) return;
+        if (!HeroBotSettings.shulkerBoxAlwaysDrops) return;
+        if (serverLevel.getGameRules().get(GameRules.BLOCK_DROPS)) return;
 
-        boolean blockDrops = serverLevel.getGameRules().get(GameRules.BLOCK_DROPS);
-
-        boolean isShulker =
-                itemStack.getItem() instanceof BlockItem blockItem &&
-                        blockItem.getBlock() instanceof ShulkerBoxBlock;
-
-        if (!blockDrops && !(HeroBotSettings.shulkerBoxAlwaysDrops && isShulker)) {
-            return;
-        }
+        boolean isShulker = itemStack.getItem() instanceof BlockItem blockItem
+                && blockItem.getBlock() instanceof ShulkerBoxBlock;
+        if (!isShulker || itemStack.isEmpty()) return;
 
         ItemEntity itemEntity = supplier.get();
         itemEntity.setDefaultPickUpDelay();
         level.addFreshEntity(itemEntity);
+        ci.cancel();
     }
 }
