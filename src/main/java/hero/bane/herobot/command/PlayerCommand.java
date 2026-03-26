@@ -1,5 +1,12 @@
 package hero.bane.herobot.command;
 
+import com.google.common.collect.ImmutableMultimap;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.mojang.authlib.GameProfile;
+import com.mojang.authlib.properties.Property;
+import com.mojang.authlib.properties.PropertyMap;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
@@ -43,14 +50,6 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
-
-import com.google.common.collect.ImmutableMultimap;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import com.mojang.authlib.GameProfile;
-import com.mojang.authlib.properties.Property;
-import com.mojang.authlib.properties.PropertyMap;
 
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
@@ -320,12 +319,29 @@ public class PlayerCommand {
                 .then(literal("once")
                         .executes(manipulation(ap -> ap.start(type, Action.once()))))
                 .then(literal("continuous")
-                        .executes(manipulation(ap -> ap.start(type, Action.continuous()))))
-                .then(literal("interval")
+                        .executes(manipulation(ap -> ap.start(type, Action.continuous())))
                         .then(argument("ticks", IntegerArgumentType.integer(1))
+                                .executes(c -> {
+                                            if (IntegerArgumentType.getInteger(c, "ticks") == 1) {
+                                                return manipulate(c, ap -> ap.start(type, Action.once()));
+                                            } else {
+                                                return manipulate(c,
+                                                        ap -> ap.start(type,
+                                                                Action.continuous(IntegerArgumentType.getInteger(c, "ticks"))));
+                                            }
+                                        }
+                                )))
+                .then(literal("interval")
+                        .then(argument("interval", IntegerArgumentType.integer(1))
                                 .executes(c -> manipulate(c,
                                         ap -> ap.start(type,
-                                                Action.interval(IntegerArgumentType.getInteger(c, "ticks")))))));
+                                                Action.interval(IntegerArgumentType.getInteger(c, "interval")))))
+                                .then(argument("ticks", IntegerArgumentType.integer(1))
+                                        .executes(c -> manipulate(c,
+                                                ap -> ap.start(type,
+                                                        Action.interval(
+                                                                IntegerArgumentType.getInteger(c, "interval"),
+                                                                IntegerArgumentType.getInteger(c, "ticks"))))))));
     }
 
 

@@ -34,7 +34,7 @@ public class DistanceCommand {
         Vec3 get(CommandContext<CommandSourceStack> c) throws CommandSyntaxException;
     }
 
-    public static void register(CommandDispatcher<CommandSourceStack> dispatcher, CommandBuildContext context) {
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher, CommandBuildContext ctx) {
         dispatcher.register(
                 literal("distance")
                         .then(fromSubtree("from", false))

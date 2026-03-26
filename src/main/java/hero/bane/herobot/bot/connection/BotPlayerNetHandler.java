@@ -3,7 +3,6 @@ package hero.bane.herobot.bot.connection;
 import hero.bane.herobot.bot.BotPlayer;
 import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.protocol.Packet;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
@@ -23,10 +22,6 @@ public class BotPlayerNetHandler extends ServerGamePacketListenerImpl {
             CommonListenerCookie cookie
     ) {
         super(server, connection, player, cookie);
-    }
-
-    @Override
-    public void send(@NonNull Packet<?> packet) {
     }
 
     @Override

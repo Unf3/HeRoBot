@@ -13,7 +13,7 @@ import net.minecraft.network.chat.Component;
 public final class HeroBotCommand {
     private static final String versionProblems = "Version Getter Messed Up, ping HerobaneNair or fix fabric.mod";
 
-    public static void register(CommandDispatcher<CommandSourceStack> dispatcher, CommandBuildContext context) {
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher, CommandBuildContext ctx) {
         dispatcher.register(
                 Commands.literal("herobot")
                         .executes(HeroBotCommand::version)
@@ -24,7 +24,8 @@ public final class HeroBotCommand {
     private static int version(CommandContext<CommandSourceStack> context) {
         String pvpBotVersion = FabricLoader.getInstance()
                 .getModContainer("herobot")
-                .get().getMetadata().getVersion().getFriendlyString();
+                .orElseThrow(() -> new IllegalStateException("HeroBot mod container not found. Something went very wrong"))
+                .getMetadata().getVersion().getFriendlyString();
 
         int versionReturned = 0;
 

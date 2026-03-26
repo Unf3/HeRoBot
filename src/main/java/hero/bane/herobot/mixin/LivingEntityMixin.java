@@ -107,6 +107,7 @@ public abstract class LivingEntityMixin extends Entity {
 
     @ModifyReturnValue(method = "hurtServer", at = @At("RETURN"))
     private boolean handleBlockedHit(boolean original) {
+        // Still only works on non-botPlayer players
         if (blockedHit) {
             blockedHit = false;
             if (HeroBotSettings.shieldStunning) {

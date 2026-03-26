@@ -108,6 +108,7 @@ public class BotPlayerActionPack {
     public BotPlayerActionPack stop(ActionType type) {
         Action action = actions.remove(type);
         if (action != null) {
+            action.ticksRemaining = -1;
             type.stop(player, action);
         }
         if (type == ActionType.USE) {
@@ -665,9 +666,7 @@ public class BotPlayerActionPack {
                         ap.jumping = true;
                     } else if (player.onGround()) {
                         player.jumpFromGround();
-                    }
-
-                    if (!player.onGround() && !player.getAbilities().flying) {
+                    } else if (!player.onClimbable() && !player.getAbilities().flying) {
                         player.tryToStartFallFlying();
                     }
                 } else {
@@ -675,8 +674,6 @@ public class BotPlayerActionPack {
                     if (player.getAbilities().flying) {
                         ap.jumping = true;
                     } else {
-                        if (!player.onGround())
-                            player.tryToStartFallFlying();
                         player.setJumping(true);
                     }
                 }
@@ -802,29 +799,48 @@ public class BotPlayerActionPack {
         private int count;
         private int next;
         private final boolean isContinuous;
+        private int ticksRemaining; // -1 = unlimited
 
-        private Action(int limit, int interval, int offset, boolean continuous, InteractionHand hand) {
+        private Action(int limit, int interval, int offset, boolean continuous, InteractionHand hand, int ticksRemaining) {
             this.limit = limit;
             this.interval = interval;
             this.offset = offset;
             this.hand = hand;
             next = interval + offset;
             isContinuous = continuous;
+            this.ticksRemaining = ticksRemaining;
         }
 
         public static Action once() {
-            return new Action(1, 1, 0, false, null);
+            return new Action(1, 1, 0, false, null, -1);
         }
 
         public static Action continuous() {
-            return new Action(-1, 1, 0, true, null);
+            return new Action(-1, 1, 0, true, null, -1);
+        }
+
+        public static Action continuous(int ticks) {
+            return new Action(-1, 1, 0, true, null, ticks);
         }
 
         public static Action interval(int interval) {
-            return new Action(-1, interval, 0, false, null);
+            return new Action(-1, interval, 0, false, null, -1);
+        }
+
+        public static Action interval(int interval, int ticks) {
+            return new Action(-1, interval, 0, false, null, ticks);
         }
 
         Boolean tick(BotPlayerActionPack actionPack, ActionType type) {
+            if (ticksRemaining > 0) {
+                ticksRemaining--;
+                if (ticksRemaining <= 0) {
+                    type.stop(actionPack.player, this);
+                    done = true;
+                    return null;
+                }
+            }
+
             next--;
             Boolean cancel = null;
             if (next <= 0) {
@@ -852,6 +868,8 @@ public class BotPlayerActionPack {
             return cancel;
         }
 
+        // Might want to expand to other types, for now we can have it set only to USE
+        @SuppressWarnings("SameParameterValue")
         void retry(BotPlayerActionPack actionPack, ActionType type) {
             if (!type.preventSpectator || !actionPack.player.isSpectator()) {
                 type.execute(actionPack.player, this);

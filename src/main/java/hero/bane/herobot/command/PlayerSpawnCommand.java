@@ -77,6 +77,8 @@ public class PlayerSpawnCommand {
 
     private static Set<String> getNameSuggestions(CommandSourceStack source) {
         Set<String> names = new LinkedHashSet<>();
+        names.add("HerobaneNair");
+        names.add("Broeo");
         names.add("Steve");
         names.add("Alex");
         names.add("TheobaldTheBot");
