@@ -7,6 +7,7 @@ public final class RuleEntry {
     public final String name;
     public final String description;
     public final Class<?> type;
+    public final Bounds bounds;
     private final Field field;
     private final Object defaultValue;
 
@@ -15,8 +16,13 @@ public final class RuleEntry {
         this.name = field.getName();
         this.description = rule.desc();
         this.type = field.getType();
+        this.bounds = field.getAnnotation(Bounds.class);
         field.setAccessible(true);
         this.defaultValue = get();
+    }
+
+    public boolean hasBounds() {
+        return bounds != null;
     }
 
     public Object get() {

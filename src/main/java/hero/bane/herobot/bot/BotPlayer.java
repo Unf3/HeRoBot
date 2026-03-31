@@ -4,7 +4,7 @@ import com.mojang.authlib.GameProfile;
 import hero.bane.herobot.HeroBotSettings;
 import hero.bane.herobot.bot.connection.BotClientConnection;
 import hero.bane.herobot.bot.connection.ServerPlayerInterface;
-import hero.bane.herobot.bot.pathing.BotPathSettings;
+import hero.bane.herobot.bot.pathing.PathSettings;
 import hero.bane.herobot.mixin.LivingEntityAccessor;
 import hero.bane.herobot.mixin.ServerPlayerAccessor;
 import it.unimi.dsi.fastutil.doubles.DoubleDoubleImmutablePair;
@@ -66,8 +66,7 @@ public class BotPlayer extends ServerPlayer {
 
     public int ping = 0;
 
-    //thought this was a clean way to do this
-    private record DelayedKnockback(long tick, double strength, double x, double z) {
+    private record DelayedKnockback(long tick, double strength, double x, double z, double horizontalScale) {
     }
 
     private final List<DelayedKnockback> pendingKnockbacks = new ArrayList<>();
@@ -77,6 +76,8 @@ public class BotPlayer extends ServerPlayer {
 
     private final List<DelayedExplosionKB> pendingExplosionKB = new ArrayList<>();
 
+    private long shieldDisabledTick = -1;
+
     public Runnable fixStartingPosition = () -> {
     };
     public boolean isAShadow;
@@ -84,10 +85,12 @@ public class BotPlayer extends ServerPlayer {
     public Vec3 spawnPos;
     public double spawnYaw;
 
-    private BotPathing pathFollower;
-    private final BotPathSettings pathSettings = new BotPathSettings();
+    private boolean inventoryScreenOpen;
 
-    public BotPathSettings getPathSettings() {
+    private BotPathing pathFollower;
+    private final PathSettings pathSettings = new PathSettings();
+
+    public PathSettings getPathSettings() {
         return pathSettings;
     }
 
@@ -107,6 +110,31 @@ public class BotPlayer extends ServerPlayer {
             this.pathFollower.stop();
             this.pathFollower = null;
         }
+    }
+
+    public boolean isScreenOpen() {
+        return inventoryScreenOpen || containerMenu != inventoryMenu;
+    }
+
+    public boolean isContainerOpen() {
+        return containerMenu != inventoryMenu;
+    }
+
+    public void openInventoryScreen() {
+        this.inventoryScreenOpen = true;
+    }
+
+    public void closeScreen() {
+        if (containerMenu != inventoryMenu) {
+            this.closeContainer();
+        }
+        this.inventoryScreenOpen = false;
+    }
+
+    public net.minecraft.world.inventory.AbstractContainerMenu getActiveMenu() {
+        if (containerMenu != inventoryMenu) return containerMenu;
+        if (inventoryScreenOpen) return inventoryMenu;
+        return null;
     }
 
     // Returns 1 if it was successful, 0 if it couldn't spawn
@@ -364,7 +392,7 @@ public class BotPlayer extends ServerPlayer {
         if (!pendingKnockbacks.isEmpty()) {
             pendingKnockbacks.removeIf(kb -> {
                 if (currentTick >= kb.tick()) {
-                    super.knockback(kb.strength(), kb.x(), kb.z());
+                    applyKnockbackWithScale(kb.strength(), kb.x(), kb.z(), kb.horizontalScale());
                     return true;
                 }
                 return false;
@@ -393,17 +421,38 @@ public class BotPlayer extends ServerPlayer {
 
     @Override
     public void knockback(double strength, double x, double z) {
+        scaledKnockback(strength, x, z, 1.0);
+    }
+
+    private void scaledKnockback(double strength, double x, double z, double horizontalScale) {
         int delayTicks = delayTicks(2);
         if (delayTicks <= 0) {
-            super.knockback(strength, x, z);
+            applyKnockbackWithScale(strength, x, z, horizontalScale);
         } else {
             long executeAt = this.level().getServer().getTickCount() + delayTicks;
-            pendingKnockbacks.add(new DelayedKnockback(executeAt, strength, x, z));
+            pendingKnockbacks.add(new DelayedKnockback(executeAt, strength, x, z, horizontalScale));
         }
         // Recalculate path after knockback
         if (pathFollower != null && !pathFollower.isDone()) {
             pathFollower.recalcPath();
         }
+    }
+
+    private void applyKnockbackWithScale(double strength, double x, double z, double horizontalScale) {
+        if (horizontalScale >= 1.0) {
+            super.knockback(strength, x, z);
+            return;
+        }
+        double d = strength * (1.0 - this.getAttributeValue(Attributes.KNOCKBACK_RESISTANCE));
+        if (d <= 0.0) return;
+        this.needsSync = true;
+        while (x * x + z * z < (double) 1.0E-5f) {
+            x = (this.random.nextDouble() - this.random.nextDouble()) * 0.01;
+            z = (this.random.nextDouble() - this.random.nextDouble()) * 0.01;
+        }
+        Vec3 dir = new Vec3(x, 0.0, z).normalize().scale(d * horizontalScale);
+        Vec3 vel = this.getDeltaMovement();
+        this.setDeltaMovement(vel.x / 2.0 - dir.x, this.onGround() ? Math.min(0.4, vel.y / 2.0 + d) : vel.y, vel.z / 2.0 - dir.z);
     }
 
     public int delayTicks(int p2tMultiplier) {
@@ -532,7 +581,13 @@ public class BotPlayer extends ServerPlayer {
                     }
 
                     if (!blocked) {
-                        this.knockback(0.4d, kb_x, kb_z);
+                        long currentTick = this.level().getServer().getTickCount();
+                        boolean recentShieldDisable = HeroBotSettings.shieldStunning
+                                && HeroBotSettings.shieldStunningWindow > 0
+                                && shieldDisabledTick >= 0
+                                && (currentTick - shieldDisabledTick) <= HeroBotSettings.shieldStunningWindow;
+                        double horizontalScale = recentShieldDisable ? 0.4d : 1.0d;
+                        this.scaledKnockback(0.4d, kb_x, kb_z, horizontalScale);
                         this.indicateDamage(kb_x, kb_z);
                     }
                 }
@@ -668,6 +723,7 @@ public class BotPlayer extends ServerPlayer {
         float f = livingEntity.getSecondsToDisableBlocking();
         if (f > 0.0F && blocksAttacks != null) {
             blocksAttacks.disable(serverLevel, this, f, itemStack);
+            this.shieldDisabledTick = serverLevel.getServer().getTickCount();
         }
     }
 }

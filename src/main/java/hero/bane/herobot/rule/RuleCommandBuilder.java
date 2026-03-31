@@ -61,7 +61,13 @@ public final class RuleCommandBuilder {
                     } else if (rule.type.isEnum()) {
                         for (String s : enumNames(rule.type)) b.suggest(s);
                     } else {
-                        b.suggest(String.valueOf(rule.getDefaultValue()));
+                        if (rule.hasBounds()) {
+                            Bounds bounds = rule.bounds;
+                            String boundsHint = boundsString(bounds);
+                            b.suggest(String.valueOf(rule.getDefaultValue()), Component.literal(boundsHint));
+                        } else {
+                            b.suggest(String.valueOf(rule.getDefaultValue()));
+                        }
                     }
                     return b.buildFuture();
                 })
@@ -81,14 +87,13 @@ public final class RuleCommandBuilder {
         Object defaultValue = rule.getDefaultValue();
         rule.resetToDefault();
 
-        boolean saved = false;
+        boolean saved;
 
         if (perm == Permanence.TEMP) {
             RuleConfigIO.setTemp(rule.name, defaultValue);
         } else {
             if (scope == Scope.CLIENT) {
                 RuleConfigIO.setPermClient(rule.name, defaultValue);
-                saved = true;
             } else {
                 saved = RuleConfigIO.setPermWorld(rule.name, defaultValue);
                 if (!saved) {
@@ -98,7 +103,7 @@ public final class RuleCommandBuilder {
             }
         }
 
-        reply(c.getSource(), rule, defaultValue, perm, scope, saved);
+        reply(c.getSource(), rule, defaultValue, perm, scope);
         return 1;
     }
 
@@ -114,14 +119,13 @@ public final class RuleCommandBuilder {
             return 0;
         }
 
-        boolean saved = false;
+        boolean saved;
 
         if (perm == Permanence.TEMP) {
             RuleConfigIO.setTemp(rule.name, value);
         } else {
             if (scope == Scope.CLIENT) {
                 RuleConfigIO.setPermClient(rule.name, value);
-                saved = true;
             } else {
                 saved = RuleConfigIO.setPermWorld(rule.name, value);
                 if (!saved) {
@@ -131,29 +135,60 @@ public final class RuleCommandBuilder {
             }
         }
 
-        reply(c.getSource(), rule, value, perm, scope, saved);
+        reply(c.getSource(), rule, value, perm, scope);
         return 1;
     }
 
     private static Object parseValue(RuleEntry rule, String input) {
         if (rule.type == boolean.class) return Boolean.parseBoolean(input);
-        if (rule.type == int.class) return Integer.parseInt(input);
+        if (rule.type == int.class) {
+            int v = Integer.parseInt(input);
+            if (rule.hasBounds()) {
+                Bounds b = rule.bounds;
+                int min = (int) b.min();
+                int max = (int) b.max();
+                if (v < min || v > max) {
+                    throw new IllegalArgumentException(rule.name + " must be in range " + boundsString(b));
+                }
+            }
+            return v;
+        }
+        if (rule.type == float.class) {
+            float v = Float.parseFloat(input);
+            if (rule.hasBounds()) {
+                Bounds b = rule.bounds;
+                if (v < b.min() || v > b.max()) {
+                    throw new IllegalArgumentException(rule.name + " must be in range " + boundsString(b));
+                }
+            }
+            return v;
+        }
         if (rule.type == double.class) {
             double v = Double.parseDouble(input);
-
-            if (rule.name.equals("creativeFlyDrag")) {
-                if (v < 0.0 || v > 1.0) throw new IllegalArgumentException("creativeFlyDrag must be within the range 0-1");
-            } else if (rule.name.equals("creativeFlySpeed")) {
-                if (v < 0.0) throw new IllegalArgumentException("creativeFlySpeed must be nonnegative");
+            if (rule.hasBounds()) {
+                Bounds b = rule.bounds;
+                if (v < b.min() || v > b.max()) {
+                    throw new IllegalArgumentException(rule.name + " must be in range " + boundsString(b));
+                }
             }
-
             return v;
         }
         if (rule.type.isEnum()) return parseEnum(rule.type, input.toUpperCase());
         throw new IllegalStateException();
     }
 
-    private static void reply(CommandSourceStack src, RuleEntry rule, Object v, Permanence perm, Scope scope, boolean saved) {
+    private static String boundsString(Bounds b) {
+        String min = b.min() == Double.NEGATIVE_INFINITY ? "-∞" : formatBound(b.min());
+        String max = b.max() == Double.POSITIVE_INFINITY ? "∞" : formatBound(b.max());
+        return "[" + min + ", " + max + "]";
+    }
+
+    private static String formatBound(double v) {
+        if (v == (long) v) return String.valueOf((long) v);
+        return String.valueOf(v);
+    }
+
+    private static void reply(CommandSourceStack src, RuleEntry rule, Object v, Permanence perm, Scope scope) {
         int tagColor = perm == Permanence.PERM ? 0xAAFFFF : 0xFFFFAA;
         String permTag = perm == Permanence.PERM ? "perm" : "temp";
         String scopeTag = scope == Scope.WORLD ? "world" : "client";

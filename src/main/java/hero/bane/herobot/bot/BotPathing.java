@@ -1,8 +1,9 @@
 package hero.bane.herobot.bot;
 
 import hero.bane.herobot.bot.connection.ServerPlayerInterface;
-import hero.bane.herobot.bot.pathing.BotPathSettings;
-import hero.bane.herobot.bot.pathing.BotPathfinder;
+import hero.bane.herobot.bot.pathing.MovementHelper;
+import hero.bane.herobot.bot.pathing.PathSettings;
+import hero.bane.herobot.bot.pathing.PathFinder;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
@@ -20,7 +21,7 @@ public class BotPathing {
     private final BotPlayer bot;
     private final BotPlayerActionPack actionPack;
     private final CommandSourceStack source;
-    private final BotPathSettings settings;
+    private final PathSettings settings;
 
     private List<BlockPos> path;
     private Vec3 target;
@@ -41,7 +42,7 @@ public class BotPathing {
     private Set<BlockPos> debugger;
 
     public BotPathing(BotPlayer bot, List<BlockPos> path, Vec3 target,
-                      CommandSourceStack source, BotPathSettings settings) {
+                      CommandSourceStack source, PathSettings settings) {
         this.bot = bot;
         this.actionPack = ((ServerPlayerInterface) bot).getActionPack();
         this.path = path;
@@ -56,7 +57,7 @@ public class BotPathing {
     }
 
     public BotPathing(BotPlayer bot, Entity targetEntity,
-                      CommandSourceStack source, BotPathSettings settings) {
+                      CommandSourceStack source, PathSettings settings) {
         this.bot = bot;
         this.actionPack = ((ServerPlayerInterface) bot).getActionPack();
         this.targetEntity = targetEntity;
@@ -68,7 +69,7 @@ public class BotPathing {
         this.lastPos = bot.position();
         this.lastRecalcTarget = target;
 
-        this.path = BotPathfinder.findPath(bot.level(), bot.blockPosition(), target, settings, bot);
+        this.path = PathFinder.findPath(bot.level(), bot.blockPosition(), target, settings, bot);
         if (this.path == null) {
             this.path = List.of();
         }
@@ -78,7 +79,7 @@ public class BotPathing {
     public void recalcPath() {
         if (done) return;
         Vec3 currentTarget = targetEntity != null ? targetEntity.position() : target;
-        List<BlockPos> newPath = BotPathfinder.findPath(bot.level(), bot.blockPosition(), currentTarget, settings, bot);
+        List<BlockPos> newPath = PathFinder.findPath(bot.level(), bot.blockPosition(), currentTarget, settings, bot);
         if (newPath != null && !newPath.isEmpty()) {
             this.path = newPath;
             this.currentIndex = 0;
@@ -130,7 +131,7 @@ public class BotPathing {
             if (recalcCd <= 0 || currentIndex >= path.size()) {
                 if (lastRecalcTarget == null || lastRecalcTarget.distanceTo(target) > 2.0
                         || currentIndex >= path.size()) {
-                    List<BlockPos> newPath = BotPathfinder.findPath(bot.level(), bot.blockPosition(), target, settings, bot);
+                    List<BlockPos> newPath = PathFinder.findPath(bot.level(), bot.blockPosition(), target, settings, bot);
                     if (newPath != null && !newPath.isEmpty()) {
                         this.path = newPath;
                         this.currentIndex = 0;
@@ -150,7 +151,7 @@ public class BotPathing {
 
         while (currentIndex < path.size()) {
             BlockPos wp = path.get(currentIndex);
-            double hDist = BotPathfinder.closestHDistToBlock(wp, botPos);
+            double hDist = PathFinder.closestHDistToBlock(wp, botPos);
             double vDist = Math.abs(botPos.y - wp.getY());
             if (settings.isWithinNode(hDist, vDist)) {
                 spawnDebugReached(wp);
@@ -161,9 +162,9 @@ public class BotPathing {
         }
 
         if (currentIndex < path.size()) {
-            for (int i = path.size() - 1; i > currentIndex; i--) {
+            for (int i = Math.min(path.size() - 1, currentIndex + 3); i > currentIndex; i--) {
                 BlockPos futureWp = path.get(i);
-                double hDist = BotPathfinder.closestHDistToBlock(futureWp, botPos);
+                double hDist = PathFinder.closestHDistToBlock(futureWp, botPos);
                 double vDist = Math.abs(botPos.y - futureWp.getY());
                 if (settings.isWithinNode(hDist, vDist)) {
                     for (int j = currentIndex; j <= i; j++) {
@@ -175,16 +176,21 @@ public class BotPathing {
             }
         }
 
+        // allow skipping ahead to a lower node (descending) within 2 steps
         if (currentIndex < path.size()) {
-            int bestIndex = currentIndex;
             for (int i = currentIndex + 1; i < path.size() && (i - currentIndex) <= 2; i++) {
                 BlockPos candidate = path.get(i);
-                if (candidate.getY() <= botPos.y + 0.5) {
-                    bestIndex = i;
+                if (candidate.getY() < botPos.y - 0.5) {
+                    double hDist = PathFinder.closestHDistToBlock(candidate, botPos);
+                    if (hDist < 1.5) {
+                        for (int j = currentIndex; j < i; j++) {
+                            spawnDebugReached(path.get(j));
+                        }
+                        currentIndex = i;
+                    }
                     break;
                 }
             }
-            currentIndex = bestIndex;
         }
 
         if (currentIndex < path.size()) {
@@ -219,8 +225,12 @@ public class BotPathing {
             if (bot.onGround()) {
                 if (waypoint.getY() > botPos.y + 0.5) {
                     bot.jumpFromGround();
+                } else if (isParkourJump(botPos, waypoint)) {
+                    // sprint is required for gap jumping
+                    actionPack.setSprinting(true);
+                    bot.jumpFromGround();
                 } else if (waypoint.getY() < botPos.y - 0.5
-                        && settings.getMoveType() == BotPathSettings.MoveType.SPRINT_JUMP) {
+                        && settings.getMoveType() == PathSettings.MoveType.SPRINT_JUMP) {
                     bot.jumpFromGround();
                 }
             }
@@ -269,6 +279,32 @@ public class BotPathing {
         lastPos = botPos;
     }
 
+    private boolean isParkourJump(Vec3 botPos, BlockPos waypoint) {
+        int bx = (int) Math.floor(botPos.x);
+        int bz = (int) Math.floor(botPos.z);
+        int by = (int) Math.floor(botPos.y);
+        int wx = waypoint.getX();
+        int wz = waypoint.getZ();
+        int wy = waypoint.getY();
+
+        // only horizontal or ascending parkour
+        if (wy < by) return false;
+
+        int dx = wx - bx;
+        int dz = wz - bz;
+        int dist = Math.abs(dx) + Math.abs(dz);
+
+        // gap jump is 2-4 blocks cardinal distance
+        if (dist < 2 || dist > 4) return false;
+        // must be cardinal (one axis is 0)
+        if (dx != 0 && dz != 0) return false;
+
+        // check that there's actually a gap (no ground under the block in front)
+        int stepDx = Integer.compare(dx, 0);
+        int stepDz = Integer.compare(dz, 0);
+        return !MovementHelper.canWalkOn(bot.level(), bx + stepDx, by - 1, bz + stepDz, settings);
+    }
+
     private void setVerticalLook(Vec3 lookTarget) {
         Vec3 botEye = bot.getEyePosition();
         double dx = lookTarget.x - botEye.x;
@@ -301,21 +337,30 @@ public class BotPathing {
 
         double hDistSq = horizontalDistanceSq(botPos, target);
         boolean nearTarget = hDistSq <= 25.0;
+        boolean closeRange = hDistSq <= 100.0; // within 10 blocks
 
         switch (settings.getMoveType()) {
             case WALK -> {
                 actionPack.setForward(1);
                 actionPack.setSprinting(false);
+                actionPack.autoJump = false;
             }
             case SPRINT -> {
                 actionPack.setForward(1);
                 actionPack.setSprinting(!nearTarget);
+                actionPack.autoJump = false;
             }
             case SPRINT_JUMP -> {
                 actionPack.setForward(1);
                 actionPack.setSprinting(!nearTarget);
-                if (!nearTarget && bot.onGround() && shouldAllowJump(hDistSq, currentWaypoint)) {
-                    bot.jumpFromGround();
+                if (closeRange) {
+                    // within 10 blocks: stop spam jumping, let autojump handle obstacles
+                    actionPack.autoJump = true;
+                } else {
+                    actionPack.autoJump = false;
+                    if (bot.onGround() && shouldAllowJump(hDistSq, currentWaypoint)) {
+                        bot.jumpFromGround();
+                    }
                 }
             }
         }
@@ -327,7 +372,7 @@ public class BotPathing {
         return settings.isWithinTarget(hDist, vDist);
     }
 
-    private static Vec3 computeEntityTarget(Entity entity, BotPathSettings settings, BotPlayer bot) {
+    private static Vec3 computeEntityTarget(Entity entity, PathSettings settings, BotPlayer bot) {
         if (settings.getMaxVerticalDistance() < 0) {
             BlockPos start = entity.blockPosition();
             var level = bot.level();
@@ -381,6 +426,7 @@ public class BotPathing {
         actionPack.setForward(0);
         actionPack.setStrafing(0);
         actionPack.setSprinting(false);
+        actionPack.autoJump = false;
     }
 
     public boolean isDone() {

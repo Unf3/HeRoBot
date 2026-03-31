@@ -7,7 +7,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
-public class BotPathSettings {
+public class PathSettings {
 
     public enum MoveType {
         WALK, SPRINT, SPRINT_JUMP;
@@ -32,7 +32,7 @@ public class BotPathSettings {
     private double verticalMoveCost = 1.5;
     private boolean debug = false;
 
-    public BotPathSettings() {
+    public PathSettings() {
         avoidedBlocks.add(Blocks.WATER);
         avoidedBlocks.add(Blocks.BUBBLE_COLUMN);
 
@@ -54,7 +54,7 @@ public class BotPathSettings {
         avoidedBlocks.add(Blocks.ACTIVATOR_RAIL);
     }
 
-    public void copyFrom(BotPathSettings other) {
+    public void copyFrom(PathSettings other) {
         this.avoidedBlocks.clear();
         this.avoidedBlocks.addAll(other.avoidedBlocks);
         this.moveType = other.moveType;
