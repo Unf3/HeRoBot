@@ -30,12 +30,10 @@ public class PathSettings {
     private boolean stopFollowing = true;
     private double horizontalMoveCost = 1.0;
     private double verticalMoveCost = 1.5;
+    private double swimCostMultiplier = 3.0;
     private boolean debug = false;
 
     public PathSettings() {
-        avoidedBlocks.add(Blocks.WATER);
-        avoidedBlocks.add(Blocks.BUBBLE_COLUMN);
-
         avoidedBlocks.add(Blocks.LAVA);
         avoidedBlocks.add(Blocks.MAGMA_BLOCK);
         avoidedBlocks.add(Blocks.FIRE);
@@ -65,6 +63,7 @@ public class PathSettings {
         this.stopFollowing = other.stopFollowing;
         this.horizontalMoveCost = other.horizontalMoveCost;
         this.verticalMoveCost = other.verticalMoveCost;
+        this.swimCostMultiplier = other.swimCostMultiplier;
         this.debug = other.debug;
     }
 
@@ -154,6 +153,22 @@ public class PathSettings {
     public void setVerticalMoveCost(double value) {
         if (value <= 0) return;
         this.verticalMoveCost = value;
+    }
+
+    public double getSwimCostMultiplier() {
+        return swimCostMultiplier;
+    }
+
+    public void setSwimCostMultiplier(double value) {
+        if (value <= 0) return;
+        this.swimCostMultiplier = value;
+    }
+
+    public void calculateSwimCost(double waterMovementEfficiency, boolean hasDolphinsGrace) {
+        double base = 3.0;
+        base *= (1.0 - waterMovementEfficiency * 0.9);
+        if (hasDolphinsGrace) base *= 0.3;
+        this.swimCostMultiplier = Math.max(0.1, base);
     }
 
     public boolean isDebug() {

@@ -177,12 +177,85 @@ public enum Moves {
         public void apply(Level level, int x, int y, int z, PathSettings settings, int maxJump, int maxFall, MoveResult result) {
             parkourCost(level, x, y, z, -1, 0, settings, result);
         }
+    },
+
+    SWIM_NORTH(0, 0, -1) {
+        @Override
+        public void apply(Level level, int x, int y, int z, PathSettings settings, int maxJump, int maxFall, MoveResult result) {
+            swimHorizontal(level, x, y, z, x, z - 1, settings, result);
+        }
+    },
+
+    SWIM_SOUTH(0, 0, +1) {
+        @Override
+        public void apply(Level level, int x, int y, int z, PathSettings settings, int maxJump, int maxFall, MoveResult result) {
+            swimHorizontal(level, x, y, z, x, z + 1, settings, result);
+        }
+    },
+
+    SWIM_EAST(+1, 0, 0) {
+        @Override
+        public void apply(Level level, int x, int y, int z, PathSettings settings, int maxJump, int maxFall, MoveResult result) {
+            swimHorizontal(level, x, y, z, x + 1, z, settings, result);
+        }
+    },
+
+    SWIM_WEST(-1, 0, 0) {
+        @Override
+        public void apply(Level level, int x, int y, int z, PathSettings settings, int maxJump, int maxFall, MoveResult result) {
+            swimHorizontal(level, x, y, z, x - 1, z, settings, result);
+        }
+    },
+
+    SWIM_UP(0, +1, 0) {
+        @Override
+        public void apply(Level level, int x, int y, int z, PathSettings settings, int maxJump, int maxFall, MoveResult result) {
+            swimVertical(level, x, y, z, 1, settings, result);
+        }
+    },
+
+    SWIM_DOWN(0, -1, 0) {
+        @Override
+        public void apply(Level level, int x, int y, int z, PathSettings settings, int maxJump, int maxFall, MoveResult result) {
+            swimVertical(level, x, y, z, -1, settings, result);
+        }
+    },
+
+    BUBBLE_COLUMN_UP(0, +1, 0, false, true) {
+        @Override
+        public void apply(Level level, int x, int y, int z, PathSettings settings, int maxJump, int maxFall, MoveResult result) {
+            if (!MovementHelper.isBubbleColumnUp(level, x, y, z)) return;
+            int height = MovementHelper.getBubbleColumnHeight(level, x, y, z, true);
+            int destY = y + height;
+            if (MovementHelper.canSwimThrough(level, x, destY, z) || canWalkOn(level, x, destY - 1, z, settings)) {
+                result.x = x;
+                result.y = destY;
+                result.z = z;
+                result.cost = height * BUBBLE_COST_PER_BLOCK;
+            }
+        }
+    },
+
+    BUBBLE_COLUMN_DOWN(0, -1, 0, false, true) {
+        @Override
+        public void apply(Level level, int x, int y, int z, PathSettings settings, int maxJump, int maxFall, MoveResult result) {
+            if (!MovementHelper.isBubbleColumnDown(level, x, y, z)) return;
+            int depth = MovementHelper.getBubbleColumnHeight(level, x, y, z, false);
+            int destY = y - depth;
+            if (MovementHelper.canSwimThrough(level, x, destY, z) || canWalkOn(level, x, destY - 1, z, settings)) {
+                result.x = x;
+                result.y = destY;
+                result.z = z;
+                result.cost = depth * BUBBLE_COST_PER_BLOCK;
+            }
+        }
     };
 
     private static final double SQRT_2 = Math.sqrt(2);
     private static final double JUMP_PENALTY = 0.5;
     private static final double SPRINT_MULTIPLIER = 0.6;
     private static final double FALL_COST_PER_BLOCK = 0.3;
+    private static final double BUBBLE_COST_PER_BLOCK = 0.1;
 
     public final int xOffset;
     public final int yOffset;
@@ -365,5 +438,45 @@ public enum Moves {
             result.cost = cost;
             return;
         }
+    }
+
+    private static void swimHorizontal(Level level, int x, int y, int z, int destX, int destZ, PathSettings settings, MoveResult result) {
+        boolean srcWater = MovementHelper.isWater(level, x, y, z);
+        boolean swimming = MovementHelper.isWater(level, destX, y, destZ);
+        if (!srcWater && !swimming) return;
+
+        if (!MovementHelper.canSwimThrough(level, destX, y, destZ)
+                && !isPassable(level, destX, y, destZ, settings)) return;
+        if (!MovementHelper.canSwimThrough(level, destX, y + 1, destZ)
+                && !isPassable(level, destX, y + 1, destZ, settings)) return;
+
+        boolean landing = !swimming && canWalkOn(level, destX, y - 1, destZ, settings);
+        if (!landing && !swimming) return;
+
+        result.x = destX;
+        result.y = y;
+        result.z = destZ;
+        result.cost = swimming
+                ? settings.getHorizontalMoveCost() * settings.getSwimCostMultiplier()
+                : settings.getHorizontalMoveCost();
+    }
+
+    private static void swimVertical(Level level, int x, int y, int z, int dy, PathSettings settings, MoveResult result) {
+        if (!MovementHelper.isWater(level, x, y, z)) return;
+
+        int destY = y + dy;
+        if (dy > 0) {
+            if (!MovementHelper.canSwimThrough(level, x, destY, z)
+                    && !isPassable(level, x, destY, z, settings)) return;
+            if (!MovementHelper.canSwimThrough(level, x, destY + 1, z)
+                    && !isPassable(level, x, destY + 1, z, settings)) return;
+        } else {
+            if (!MovementHelper.canSwimThrough(level, x, destY, z)) return;
+        }
+
+        result.x = x;
+        result.y = destY;
+        result.z = z;
+        result.cost = settings.getVerticalMoveCost() * settings.getSwimCostMultiplier();
     }
 }

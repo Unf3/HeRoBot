@@ -96,7 +96,11 @@ public final class PathSubtree {
                                 .then(Commands.literal("vertical")
                                         .executes(PathSubtree::getVerticalMoveCost)
                                         .then(Commands.argument("value", DoubleArgumentType.doubleArg(0.01))
-                                                .executes(PathSubtree::setVerticalMoveCost)))));
+                                                .executes(PathSubtree::setVerticalMoveCost)))
+                                .then(Commands.literal("swim")
+                                        .executes(PathSubtree::getSwimCost)
+                                        .then(Commands.argument("value", DoubleArgumentType.doubleArg(0.1))
+                                                .executes(PathSubtree::setSwimCost)))));
     }
 
     private static int pathToPos(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
@@ -151,7 +155,7 @@ public final class PathSubtree {
         return 1;
     }
 
-    private static int pathStop(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+    public static int pathStop(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         for (BotPlayer bot : CommandHelper.requireBotTargets(context)) {
             bot.clearPathFollower();
             context.getSource().sendSuccess(() -> Component.literal(bot.getGameProfile().name() + " stopped pathing"), false);
@@ -171,7 +175,8 @@ public final class PathSubtree {
                     "\n  stopFollowing: " + s.isStopFollowing() +
                     "\n  debug: " + s.isDebug() +
                     "\n  cost horizontal: " + s.getHorizontalMoveCost() +
-                    "\n  cost vertical: " + s.getVerticalMoveCost();
+                    "\n  cost vertical: " + s.getVerticalMoveCost() +
+                    "\n  cost swim: " + String.format("%.2f", s.getSwimCostMultiplier()) + " (auto-calculated)";
             context.getSource().sendSuccess(() -> Component.literal(msg), false);
         }
         return 1;
@@ -372,6 +377,23 @@ public final class PathSubtree {
         for (BotPlayer bot : CommandHelper.requireBotTargets(context)) {
             bot.getPathSettings().setVerticalMoveCost(value);
             context.getSource().sendSuccess(() -> Component.literal("Set " + bot.getGameProfile().name() + "'s cost vertical to " + value), false);
+        }
+        return 1;
+    }
+
+    private static int getSwimCost(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        for (BotPlayer bot : CommandHelper.requireBotTargets(context)) {
+            double val = bot.getPathSettings().getSwimCostMultiplier();
+            context.getSource().sendSuccess(() -> Component.literal(bot.getGameProfile().name() + "'s cost swim: " + String.format("%.2f", val) + " (auto-calculated from gear)"), false);
+        }
+        return 1;
+    }
+
+    private static int setSwimCost(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        double value = DoubleArgumentType.getDouble(context, "value");
+        for (BotPlayer bot : CommandHelper.requireBotTargets(context)) {
+            bot.getPathSettings().setSwimCostMultiplier(value);
+            context.getSource().sendSuccess(() -> Component.literal("Set " + bot.getGameProfile().name() + "'s cost swim to " + value), false);
         }
         return 1;
     }

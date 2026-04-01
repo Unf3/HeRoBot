@@ -2,14 +2,15 @@ package hero.bane.herobot.bot;
 
 import hero.bane.herobot.bot.connection.ServerPlayerInterface;
 import hero.bane.herobot.bot.pathing.MovementHelper;
-import hero.bane.herobot.bot.pathing.PathSettings;
 import hero.bane.herobot.bot.pathing.PathFinder;
+import hero.bane.herobot.bot.pathing.PathSettings;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
@@ -53,6 +54,7 @@ public class BotPathing {
         this.currentIndex = 0;
         this.stuckTime = 0;
         this.lastPos = bot.position();
+        this.lastRecalcTarget = target;
         initDebugNodes(path);
     }
 
@@ -104,51 +106,77 @@ public class BotPathing {
 
         Vec3 botPos = bot.position();
 
+        if (!updateTarget(botPos)) return;
+        advanceWaypoints(botPos);
+        moveTowardGoal(botPos);
+        tickDebugParticles();
+        tickStuck(botPos);
+    }
+
+    // --- target management ---
+
+    private boolean updateTarget(Vec3 botPos) {
         if (targetEntity != null) {
             if (targetEntity.isRemoved()) {
                 stop();
                 source.sendFailure(Component.literal(bot.getGameProfile().name() + " lost target entity"));
-                return;
+                return false;
             }
             target = computeEntityTarget(targetEntity, settings, bot);
-
-            if (isWithinTarget(botPos)) {
-                if (settings.isStopFollowing()) {
-                    stop();
-                    source.sendSuccess(() -> Component.literal(bot.getGameProfile().name() + " reached target entity"), false);
-                } else {
-                    actionPack.setForward(0);
-                    actionPack.setStrafing(0);
-                    actionPack.setSprinting(false);
-                    Vec3 eyePos = targetEntity.getEyePosition();
-                    actionPack.lookAt(eyePos);
-                    setVerticalLook(eyePos);
-                }
-                return;
-            }
-
-            recalcCd--;
-            if (recalcCd <= 0 || currentIndex >= path.size()) {
-                if (lastRecalcTarget == null || lastRecalcTarget.distanceTo(target) > 2.0
-                        || currentIndex >= path.size()) {
-                    List<BlockPos> newPath = PathFinder.findPath(bot.level(), bot.blockPosition(), target, settings, bot);
-                    if (newPath != null && !newPath.isEmpty()) {
-                        this.path = newPath;
-                        this.currentIndex = 0;
-                        this.lastRecalcTarget = target;
-                        initDebugNodes(newPath);
-                    }
-                }
-                recalcCd = 20;
-            }
-        } else {
-            if (isWithinTarget(botPos)) {
-                stop();
-                source.sendSuccess(() -> Component.literal(bot.getGameProfile().name() + " reached target position"), false);
-                return;
-            }
         }
 
+        if (isWithinTarget(botPos)) {
+            if (targetEntity != null && !settings.isStopFollowing()) {
+                actionPack.setForward(0);
+                actionPack.setStrafing(0);
+                actionPack.setSprinting(false);
+                Vec3 eyePos = targetEntity.getEyePosition();
+                actionPack.lookAt(eyePos);
+                setVerticalLook(eyePos);
+                return false;
+            }
+            stop();
+            String msg = bot.getGameProfile().name() + " reached target"
+                    + (targetEntity != null ? " entity" : " position");
+            source.sendSuccess(() -> Component.literal(msg), false);
+            return false;
+        }
+
+        if (targetEntity != null) {
+            tickEntityRecalc();
+        } else if (currentIndex >= path.size()) {
+            tryRecalcPath();
+        }
+
+        return true;
+    }
+
+    private void tickEntityRecalc() {
+        recalcCd--;
+        if (recalcCd <= 0 || currentIndex >= path.size()) {
+            tryRecalcPath();
+            recalcCd = 20;
+        }
+    }
+
+    private void tryRecalcPath() {
+        if (lastRecalcTarget != null && lastRecalcTarget.distanceTo(target) <= 2.0
+                && currentIndex < path.size()) {
+            return;
+        }
+        List<BlockPos> newPath = PathFinder.findPath(bot.level(), bot.blockPosition(), target, settings, bot);
+        if (newPath != null && !newPath.isEmpty()) {
+            this.path = newPath;
+            this.currentIndex = 0;
+            this.lastRecalcTarget = target;
+            initDebugNodes(newPath);
+        }
+    }
+
+    // --- waypoint advancement ---
+
+    private void advanceWaypoints(Vec3 botPos) {
+        // advance past reached nodes
         while (currentIndex < path.size()) {
             BlockPos wp = path.get(currentIndex);
             double hDist = PathFinder.closestHDistToBlock(wp, botPos);
@@ -161,6 +189,7 @@ public class BotPathing {
             }
         }
 
+        // skip ahead to a nearby future node
         if (currentIndex < path.size()) {
             for (int i = Math.min(path.size() - 1, currentIndex + 3); i > currentIndex; i--) {
                 BlockPos futureWp = path.get(i);
@@ -192,58 +221,116 @@ public class BotPathing {
                 }
             }
         }
+    }
 
-        if (currentIndex < path.size()) {
-            BlockPos waypoint = path.get(currentIndex);
-            Vec3 waypointCenter = Vec3.atBottomCenterOf(waypoint);
+    // --- movement ---
 
-            Vec3 lookHorizontal;
-            if (currentIndex + 1 < path.size()) {
-                lookHorizontal = Vec3.atBottomCenterOf(path.get(currentIndex + 1));
-            } else {
-                lookHorizontal = targetEntity != null ? targetEntity.position() : target;
-            }
-
-            Vec3 verticalTarget = targetEntity != null ? targetEntity.getEyePosition() : waypointCenter;
-            actionPack.lookAt(new Vec3(lookHorizontal.x, verticalTarget.y, lookHorizontal.z));
-            setVerticalLook(verticalTarget);
-
-            applyMoveType(false, botPos, waypoint);
-
-            double dx = waypointCenter.x - botPos.x;
-            double dz = waypointCenter.z - botPos.z;
-            double toWaypointAngle = Math.atan2(-dx, dz);
-            double facingAngle = Math.toRadians(bot.getYRot());
-            double relativeAngle = toWaypointAngle - facingAngle;
-            relativeAngle = Math.atan2(Math.sin(relativeAngle), Math.cos(relativeAngle));
-
-            float forward = (float) Math.cos(relativeAngle);
-            float strafe = (float) -Math.sin(relativeAngle);
-            actionPack.setForward(forward > 0 ? forward : 0);
-            actionPack.setStrafing(strafe);
-
-            if (bot.onGround()) {
-                if (waypoint.getY() > botPos.y + 0.5) {
-                    bot.jumpFromGround();
-                } else if (isParkourJump(botPos, waypoint)) {
-                    // sprint is required for gap jumping
-                    actionPack.setSprinting(true);
-                    bot.jumpFromGround();
-                } else if (waypoint.getY() < botPos.y - 0.5
-                        && settings.getMoveType() == PathSettings.MoveType.SPRINT_JUMP) {
-                    bot.jumpFromGround();
-                }
-            }
-        } else {
-            Vec3 finalLook = targetEntity != null ? targetEntity.getEyePosition() : target;
-            actionPack.lookAt(new Vec3(target.x, finalLook.y, target.z));
-            setVerticalLook(finalLook);
-            applyMoveType(true, botPos, null);
-            actionPack.setStrafing(0);
+    private void moveTowardGoal(Vec3 botPos) {
+        if (currentIndex >= path.size()) {
+            finalApproach(botPos);
+            return;
         }
 
-        tickDebugParticles();
+        BlockPos waypoint = path.get(currentIndex);
 
+        if (isFullySubmerged(bot)) {
+            swimToWaypoint(botPos, waypoint);
+        } else if (isWading(bot)) {
+            wadeToWaypoint(waypoint);
+        } else {
+            walkToWaypoint(botPos, waypoint);
+        }
+    }
+
+    private void swimToWaypoint(Vec3 botPos, BlockPos waypoint) {
+        Vec3 waypointMid = Vec3.atCenterOf(waypoint);
+        actionPack.lookAt(waypointMid);
+        setVerticalLook(waypointMid);
+        actionPack.setForward(1);
+        actionPack.setStrafing(0);
+        actionPack.setSprinting(true);
+
+        double dy = waypointMid.y - botPos.y;
+        double hDist = Math.sqrt(horizontalDistanceSq(botPos, waypointMid));
+        boolean moreVertical = Math.abs(dy) > hDist;
+
+        if (dy > 0.5) {
+            bot.setJumping(true);
+            if (moreVertical) actionPack.setSneaking(false);
+        } else if (dy < -0.5) {
+            bot.setJumping(false);
+            if (moreVertical) actionPack.setSneaking(true);
+        } else {
+            bot.setJumping(false);
+            actionPack.setSneaking(false);
+        }
+    }
+
+    private void wadeToWaypoint(BlockPos waypoint) {
+        Vec3 waypointCenter = Vec3.atBottomCenterOf(waypoint);
+        actionPack.setSneaking(false);
+        bot.setJumping(false);
+        actionPack.setForward(1);
+        actionPack.setStrafing(0);
+        actionPack.setSprinting(false);
+        actionPack.lookAt(waypointCenter);
+        setVerticalLook(waypointCenter);
+    }
+
+    private void walkToWaypoint(Vec3 botPos, BlockPos waypoint) {
+        Vec3 waypointCenter = Vec3.atBottomCenterOf(waypoint);
+        actionPack.setSneaking(false);
+        bot.setJumping(false);
+
+        Vec3 lookHorizontal;
+        if (currentIndex + 1 < path.size()) {
+            lookHorizontal = Vec3.atBottomCenterOf(path.get(currentIndex + 1));
+        } else {
+            lookHorizontal = targetEntity != null ? targetEntity.position() : target;
+        }
+
+        Vec3 verticalTarget = targetEntity != null ? targetEntity.getEyePosition() : waypointCenter;
+        actionPack.lookAt(new Vec3(lookHorizontal.x, verticalTarget.y, lookHorizontal.z));
+        setVerticalLook(verticalTarget);
+
+        applyMoveType(false, botPos, waypoint);
+
+        double dx = waypointCenter.x - botPos.x;
+        double dz = waypointCenter.z - botPos.z;
+        double toWaypointAngle = Math.atan2(-dx, dz);
+        double facingAngle = Math.toRadians(bot.getYRot());
+        double relativeAngle = toWaypointAngle - facingAngle;
+        relativeAngle = Math.atan2(Math.sin(relativeAngle), Math.cos(relativeAngle));
+
+        float forward = (float) Math.cos(relativeAngle);
+        float strafe = (float) -Math.sin(relativeAngle);
+        actionPack.setForward(forward > 0 ? forward : 0);
+        actionPack.setStrafing(strafe);
+
+        if (bot.onGround()) {
+            if (waypoint.getY() > botPos.y + 0.5) {
+                bot.jumpFromGround();
+            } else if (isParkourJump(botPos, waypoint)) {
+                actionPack.setSprinting(true);
+                bot.jumpFromGround();
+            } else if (waypoint.getY() < botPos.y - 0.5
+                    && settings.getMoveType() == PathSettings.MoveType.SPRINT_JUMP) {
+                bot.jumpFromGround();
+            }
+        }
+    }
+
+    private void finalApproach(Vec3 botPos) {
+        Vec3 finalLook = targetEntity != null ? targetEntity.getEyePosition() : target;
+        actionPack.lookAt(new Vec3(target.x, finalLook.y, target.z));
+        setVerticalLook(finalLook);
+        applyMoveType(true, botPos, null);
+        actionPack.setStrafing(0);
+    }
+
+    // --- stuck detection ---
+
+    private void tickStuck(Vec3 botPos) {
         if (retrying && currentIndex > retryNextIndex) {
             retrying = false;
             retryTarget = null;
@@ -303,6 +390,31 @@ public class BotPathing {
         int stepDx = Integer.compare(dx, 0);
         int stepDz = Integer.compare(dz, 0);
         return !MovementHelper.canWalkOn(bot.level(), bx + stepDx, by - 1, bz + stepDz, settings);
+    }
+
+    private static boolean isFullySubmerged(BotPlayer bot) {
+        int feetX = (int) Math.floor(bot.getX());
+        int feetY = (int) Math.floor(bot.getY());
+        int feetZ = (int) Math.floor(bot.getZ());
+        int headY = (int) Math.floor(bot.getY() + bot.getEyeHeight());
+        return isSwimmableBlock(bot, feetX, feetY, feetZ)
+                && isSwimmableBlock(bot, feetX, headY, feetZ);
+    }
+
+    private static boolean isWading(BotPlayer bot) {
+        int feetX = (int) Math.floor(bot.getX());
+        int feetY = (int) Math.floor(bot.getY());
+        int feetZ = (int) Math.floor(bot.getZ());
+        return isSwimmableBlock(bot, feetX, feetY, feetZ);
+    }
+
+    private static boolean isSwimmableBlock(BotPlayer bot, int x, int y, int z) {
+        BlockPos pos = new BlockPos(x, y, z);
+        BlockState state = bot.level().getBlockState(pos);
+        if (MovementHelper.isWater(bot.level(), x, y, z)) return true;
+        if (state.is(Blocks.KELP) || state.is(Blocks.KELP_PLANT)
+                || state.is(Blocks.SEAGRASS) || state.is(Blocks.TALL_SEAGRASS)) return true;
+        return !state.getFluidState().isEmpty() && state.getCollisionShape(bot.level(), pos).isEmpty();
     }
 
     private void setVerticalLook(Vec3 lookTarget) {
@@ -426,7 +538,9 @@ public class BotPathing {
         actionPack.setForward(0);
         actionPack.setStrafing(0);
         actionPack.setSprinting(false);
+        actionPack.setSneaking(false);
         actionPack.autoJump = false;
+        bot.setJumping(false);
     }
 
     public boolean isDone() {

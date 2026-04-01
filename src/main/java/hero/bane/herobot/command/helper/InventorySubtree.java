@@ -78,7 +78,8 @@ public final class InventorySubtree {
                         .then(Commands.literal("throw")
                                 .executes(InventorySubtree::heldThrow))
                         .then(Commands.literal("drag")
-                                .then(Commands.argument("slots", StringArgumentType.greedyString())
+                                .then(Commands.argument("slots", StringArgumentType.word())
+                                        .suggests((context, b) -> { b.suggest("1,2,3,4"); return b.buildFuture(); })
                                         .executes(InventorySubtree::heldDrag))));
     }
 
@@ -187,7 +188,7 @@ public final class InventorySubtree {
         for (BotPlayer bot : requireBots(c)) {
             AbstractContainerMenu menu = requireInventoryMenu(bot);
             if (!isValidSlot(menu, slot)) {
-                c.getSource().sendFailure(Component.literal("Slot " + slot + " is out of range (0-" + (menu.slots.size() - 1) + ")"));
+                c.getSource().sendFailure(Component.literal("Index out of bounds, slot " + slot + " is out of range (0-" + (menu.slots.size() - 1) + ")"));
                 return 0;
             }
             menu.clicked(slot, button, clickType, bot);
@@ -251,8 +252,8 @@ public final class InventorySubtree {
     private static int heldDrag(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
         String slotsStr = StringArgumentType.getString(c, "slots");
         int[] slots = parseSlotList(slotsStr);
-        if (slots.length == 0) {
-            c.getSource().sendFailure(Component.literal("No valid slots specified"));
+        if (slots == null || slots.length == 0) {
+            c.getSource().sendFailure(Component.literal("Invalid slot format. Use comma-separated numbers (e.g. 1,2,3,4)"));
             return 0;
         }
 
@@ -262,7 +263,7 @@ public final class InventorySubtree {
                 c.getSource().sendFailure(Component.literal(bot.getGameProfile().name() + " is not holding anything"));
                 return 0;
             }
-            executeDrag(menu, bot, slots, 0);
+            executeDrag(menu, bot, slots);
             syncMenu(menu);
         }
         return 1;
@@ -337,8 +338,8 @@ public final class InventorySubtree {
     private static int containerHeldDrag(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
         String slotsStr = StringArgumentType.getString(c, "slots");
         int[] slots = parseSlotList(slotsStr);
-        if (slots.length == 0) {
-            c.getSource().sendFailure(Component.literal("No valid slots specified"));
+        if (slots == null || slots.length == 0) {
+            c.getSource().sendFailure(Component.literal("Invalid slot format. Use comma-separated numbers (e.g. 1,2,3,4)"));
             return 0;
         }
 
@@ -348,7 +349,7 @@ public final class InventorySubtree {
                 c.getSource().sendFailure(Component.literal(bot.getGameProfile().name() + " is not holding anything"));
                 return 0;
             }
-            executeDrag(menu, bot, slots, 0);
+            executeDrag(menu, bot, slots);
             syncMenu(menu);
         }
         return 1;
@@ -452,16 +453,14 @@ public final class InventorySubtree {
         return 1;
     }
 
-    // TODO: Make this cleaner so it's a set of slots to drag over
-    @SuppressWarnings("SameParameterValue")
-    private static void executeDrag(AbstractContainerMenu menu, BotPlayer bot, int[] slots, int dragType) {
-        menu.clicked(-999, AbstractContainerMenu.getQuickcraftMask(0, dragType), ClickType.QUICK_CRAFT, bot);
+    private static void executeDrag(AbstractContainerMenu menu, BotPlayer bot, int[] slots) {
+        menu.clicked(-999, AbstractContainerMenu.getQuickcraftMask(0, 0), ClickType.QUICK_CRAFT, bot);
         for (int slot : slots) {
             if (isValidSlot(menu, slot)) {
-                menu.clicked(slot, AbstractContainerMenu.getQuickcraftMask(1, dragType), ClickType.QUICK_CRAFT, bot);
+                menu.clicked(slot, AbstractContainerMenu.getQuickcraftMask(1, 0), ClickType.QUICK_CRAFT, bot);
             }
         }
-        menu.clicked(-999, AbstractContainerMenu.getQuickcraftMask(2, dragType), ClickType.QUICK_CRAFT, bot);
+        menu.clicked(-999, AbstractContainerMenu.getQuickcraftMask(2, 0), ClickType.QUICK_CRAFT, bot);
     }
 
     private static int queryInventory(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
@@ -479,23 +478,28 @@ public final class InventorySubtree {
             boolean open = bot.isContainerOpen();
             String name = bot.getGameProfile().name();
             if (open) {
+                int slotCount = bot.containerMenu.slots.size();
                 String menuType = bot.containerMenu.getClass().getSimpleName();
-                c.getSource().sendSuccess(() -> Component.literal(name + " has " + menuType + " open"), false);
+                c.getSource().sendSuccess(() -> Component.literal(name + " has " + menuType + " open (" + slotCount + " slots)"), false);
+                c.getSource().sendSuccess(() -> Component.literal("Returns: " + slotCount).withColor(0xAAAAAA), false);
+                return slotCount;
             } else {
                 c.getSource().sendSuccess(() -> Component.literal(name + " does not have a container open"), false);
+                c.getSource().sendSuccess(() -> Component.literal("Returns: 0").withColor(0xAAAAAA), false);
+                return 0;
             }
-            return open ? 1 : 0;
         }
         return 0;
     }
 
     private static int[] parseSlotList(String input) {
-        String[] parts = input.trim().split("[\\s,]+");
+        String[] parts = input.trim().split(",");
         List<Integer> slots = new ArrayList<>();
         for (String part : parts) {
             try {
-                slots.add(Integer.parseInt(part));
-            } catch (NumberFormatException ignored) {
+                slots.add(Integer.parseInt(part.trim()));
+            } catch (NumberFormatException e) {
+                return null;
             }
         }
         return slots.stream().mapToInt(Integer::intValue).toArray();

@@ -253,6 +253,7 @@ public class BotPlayerActionPack {
         for (ActionType type : actions.keySet()) type.stop(player, actions.get(type));
         actions.clear();
         stopInterpolation();
+        if (player instanceof BotPlayer bot) bot.clearPathFollower();
         return stopMovement();
     }
 

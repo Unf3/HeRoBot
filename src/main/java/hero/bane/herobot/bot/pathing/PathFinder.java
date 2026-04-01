@@ -40,6 +40,10 @@ public class PathFinder {
         int maxJump = getMaxJumpHeight(player);
         int maxFall = getMaxFallDistance(player);
 
+        double waterEfficiency = player.getAttributeValue(Attributes.WATER_MOVEMENT_EFFICIENCY);
+        boolean dolphinsGrace = player.hasEffect(MobEffects.DOLPHINS_GRACE);
+        settings.calculateSwimCost(waterEfficiency, dolphinsGrace);
+
         PriorityQueue<Node> openSet = new PriorityQueue<>(Comparator.comparingDouble(n -> n.fCost));
         Map<Long, Double> bestCost = new HashMap<>();
         MoveResult result = new MoveResult();
@@ -122,9 +126,7 @@ public class PathFinder {
 
         int current = 0;
         while (current < path.size() - 1) {
-            // check if the next segment is a parkour jump (gap between nodes)
             if (isParkourSegment(path, current, level, settings)) {
-                // preserve the parkour landing node exactly - don't smooth across gaps
                 smoothed.add(path.get(current + 1));
                 current = current + 1;
                 continue;
@@ -132,12 +134,22 @@ public class PathFinder {
 
             int farthest = current + 1;
             for (int i = path.size() - 1; i > current + 1; i--) {
-                if (path.get(i).getY() != path.get(current).getY()) continue;
-                // don't smooth past a parkour segment
                 if (containsParkourSegment(path, current + 1, i, level, settings)) continue;
-                if (hasLineOfSight(level, path.get(current), path.get(i), settings)) {
-                    farthest = i;
-                    break;
+
+                boolean bothWater = MovementHelper.isWater(level, path.get(current).getX(), path.get(current).getY(), path.get(current).getZ())
+                        && MovementHelper.isWater(level, path.get(i).getX(), path.get(i).getY(), path.get(i).getZ());
+
+                if (bothWater) {
+                    if (hasWaterLineOfSight(level, path.get(current), path.get(i))) {
+                        farthest = i;
+                        break;
+                    }
+                } else {
+                    if (path.get(i).getY() != path.get(current).getY()) continue;
+                    if (hasLineOfSight(level, path.get(current), path.get(i), settings)) {
+                        farthest = i;
+                        break;
+                    }
                 }
             }
             smoothed.add(path.get(farthest));
@@ -196,6 +208,22 @@ public class PathFinder {
             if (!MovementHelper.isWalkable(level, x, y, z, settings)) return false;
         }
 
+        return true;
+    }
+
+    private static boolean hasWaterLineOfSight(Level level, BlockPos from, BlockPos to) {
+        int dx = to.getX() - from.getX();
+        int dy = to.getY() - from.getY();
+        int dz = to.getZ() - from.getZ();
+        int steps = Math.max(Math.max(Math.abs(dx), Math.abs(dy)), Math.abs(dz));
+        if (steps == 0) return true;
+
+        for (int step = 1; step <= steps; step++) {
+            int x = from.getX() + dx * step / steps;
+            int y = from.getY() + dy * step / steps;
+            int z = from.getZ() + dz * step / steps;
+            if (!MovementHelper.canSwimThrough(level, x, y, z)) return false;
+        }
         return true;
     }
 
