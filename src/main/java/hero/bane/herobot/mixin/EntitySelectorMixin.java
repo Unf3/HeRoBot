@@ -15,6 +15,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import java.util.Iterator;
 import java.util.List;
 
+// I DONT CARE
+@SuppressWarnings("AddedMixinMembersNamePattern")
 @Mixin(EntitySelector.class)
 public class EntitySelectorMixin implements EntitySelectorSharedDistance {
 
