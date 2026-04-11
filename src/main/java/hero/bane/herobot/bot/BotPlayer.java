@@ -1,19 +1,29 @@
 package hero.bane.herobot.bot;
 
+import com.google.common.collect.ImmutableMultimap;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.mojang.authlib.GameProfile;
+import com.mojang.authlib.properties.Property;
+import com.mojang.authlib.properties.PropertyMap;
 import hero.bane.herobot.HeroBotSettings;
 import hero.bane.herobot.bot.connection.BotClientConnection;
 import hero.bane.herobot.bot.connection.ServerPlayerInterface;
 import hero.bane.herobot.bot.pathing.PathSettings;
 import hero.bane.herobot.mixin.LivingEntityAccessor;
+import hero.bane.herobot.mixin.PlayerAccessor;
 import hero.bane.herobot.mixin.ServerPlayerAccessor;
 import it.unimi.dsi.fastutil.doubles.DoubleDoubleImmutablePair;
 import net.minecraft.advancements.CriteriaTriggers;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.DisconnectionDetails;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.game.ClientboundEntityPositionSyncPacket;
@@ -51,9 +61,13 @@ import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.NonNull;
 
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URI;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -308,6 +322,72 @@ public class BotPlayer extends ServerPlayer {
         return (this.entityData.get(DATA_PLAYER_MODE_CUSTOMISATION) & mask) != 0;
     }
 
+    public CompletableFuture<Boolean> forceLoadSkin() {
+        return forceLoadSkin(this.getUUID());
+    }
+
+    public CompletableFuture<Boolean> forceLoadSkin(String name) {
+        MinecraftServer server = this.level().getServer();
+        return CompletableFuture.supplyAsync(() -> {
+            server.services().nameToIdCache().resolveOfflineUsers(false);
+            UUID uuid = OldUsersConverter.convertMobOwnerIfNecessary(server, name);
+            if (uuid == null && HeroBotSettings.allowSpawningOfflinePlayers) {
+                server.services().nameToIdCache().resolveOfflineUsers(server.isDedicatedServer() && server.usesAuthentication());
+                uuid = UUIDUtil.createOfflinePlayerUUID(name);
+            }
+            return uuid;
+        }).thenCompose(uuid -> {
+            if (uuid == null) return CompletableFuture.completedFuture(false);
+            return forceLoadSkin(uuid);
+        });
+    }
+
+    public CompletableFuture<Boolean> forceLoadSkin(UUID skinUUID) {
+        MinecraftServer server = this.level().getServer();
+        String uuidStr = skinUUID.toString().replace("-", "");
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                HttpURLConnection connection = (HttpURLConnection) URI.create(
+                        "https://sessionserver.mojang.com/session/minecraft/profile/" + uuidStr + "?unsigned=false"
+                ).toURL().openConnection();
+                connection.setConnectTimeout(5000);
+                connection.setReadTimeout(5000);
+                if (connection.getResponseCode() != 200) return null;
+                try (InputStreamReader reader = new InputStreamReader(connection.getInputStream())) {
+                    return JsonParser.parseReader(reader).getAsJsonObject();
+                }
+            } catch (Exception e) {
+                return null;
+            }
+        }).thenApplyAsync(json -> {
+            if (json == null) return false;
+
+            ImmutableMultimap.Builder<String, Property> builder = ImmutableMultimap.builder();
+            JsonArray properties = json.getAsJsonArray("properties");
+            if (properties != null) {
+                for (var element : properties) {
+                    JsonObject prop = element.getAsJsonObject();
+                    String propName = prop.get("name").getAsString();
+                    String value = prop.get("value").getAsString();
+                    String signature = prop.has("signature") ? prop.get("signature").getAsString() : null;
+                    builder.put(propName, new Property(propName, value, signature));
+                }
+            }
+            String botName = this.getGameProfile().name();
+            GameProfile newProfile = new GameProfile(this.getUUID(), botName, new PropertyMap(builder.build()));
+            ((PlayerAccessor) this).setGameProfile(newProfile);
+
+            var playerList = server.getPlayerList();
+            playerList.broadcastAll(new ClientboundPlayerInfoRemovePacket(List.of(this.getUUID())));
+            playerList.broadcastAll(ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(List.of(this)));
+
+            ServerLevel level = this.level();
+            level.getChunkSource().removeEntity(this);
+            level.getChunkSource().addEntity(this);
+            return true;
+        }, server);
+    }
+
     public void setMainHand(HumanoidArm arm) {
         this.entityData.set(DATA_PLAYER_MAIN_HAND, arm);
     }
@@ -363,6 +443,14 @@ public class BotPlayer extends ServerPlayer {
             double startZ = this.getZ();
 
             super.tick();
+
+            if (!this.noPhysics) {
+                this.moveTowardsClosestSpace(this.getX() - this.getBbWidth() * 0.35, this.getZ() + this.getBbWidth() * 0.35);
+                this.moveTowardsClosestSpace(this.getX() - this.getBbWidth() * 0.35, this.getZ() - this.getBbWidth() * 0.35);
+                this.moveTowardsClosestSpace(this.getX() + this.getBbWidth() * 0.35, this.getZ() - this.getBbWidth() * 0.35);
+                this.moveTowardsClosestSpace(this.getX() + this.getBbWidth() * 0.35, this.getZ() + this.getBbWidth() * 0.35);
+            }
+
             // The action-pack tick is called in the mixin [for some reason]
             this.doTick();
 
@@ -385,6 +473,39 @@ public class BotPlayer extends ServerPlayer {
             // happens with that paper port thingy - not sure what that would fix, but hey
             // the game not gonna crash violently.
         }
+    }
+
+    // Should fix movement when in a block - might be ways to optimize this but shouldn't matter too much
+    private void moveTowardsClosestSpace(double x, double z) {
+        BlockPos pos = BlockPos.containing(x, this.getY(), z);
+        if (this.suffocatesAt(pos)) {
+            double xd = x - pos.getX();
+            double zd = z - pos.getZ();
+            Direction dir = null;
+            double closest = Double.MAX_VALUE;
+            for (Direction direction : new Direction[]{Direction.WEST, Direction.EAST, Direction.NORTH, Direction.SOUTH}) {
+                double axisDistance = direction.getAxis().choose(xd, 0.0, zd);
+                double distanceToEdge = direction.getAxisDirection() == Direction.AxisDirection.POSITIVE ? 1.0 - axisDistance : axisDistance;
+                if (distanceToEdge < closest && !this.suffocatesAt(pos.relative(direction))) {
+                    closest = distanceToEdge;
+                    dir = direction;
+                }
+            }
+            if (dir != null) {
+                Vec3 oldMovement = this.getDeltaMovement();
+                if (dir.getAxis() == Direction.Axis.X) {
+                    this.setDeltaMovement(0.1 * dir.getStepX(), oldMovement.y, oldMovement.z);
+                } else {
+                    this.setDeltaMovement(oldMovement.x, oldMovement.y, 0.1 * dir.getStepZ());
+                }
+            }
+        }
+    }
+
+    private boolean suffocatesAt(final BlockPos pos) {
+        AABB boundingBox = this.getBoundingBox();
+        AABB testArea = new AABB(pos.getX(), boundingBox.minY, pos.getZ(), pos.getX() + 1.0, boundingBox.maxY, pos.getZ() + 1.0).deflate(1.0E-7);
+        return this.level().collidesWithSuffocatingBlock(this, testArea);
     }
 
     private void processPendingKBs() {
