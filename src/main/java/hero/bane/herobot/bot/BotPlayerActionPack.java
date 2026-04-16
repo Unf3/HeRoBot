@@ -649,6 +649,12 @@ public class BotPlayerActionPack {
                         }
                         player.resetLastActionTime();
                         player.swing(InteractionHand.MAIN_HAND);
+                        if (action.resetMineCheck() && ap.currentBlock != null) {
+                            player.gameMode.handleBlockBreakAction(ap.currentBlock, ServerboundPlayerActionPacket.Action.ABORT_DESTROY_BLOCK, side, player.level().getMaxY(), -1);
+                            player.level().destroyBlockProgress(-1, ap.currentBlock, -1);
+                            ap.currentBlock = null;
+                            ap.curBlockDamageMP = 0;
+                        }
                         return blockBroken;
                     }
                 }
@@ -751,7 +757,7 @@ public class BotPlayerActionPack {
                         if (pos.getY() < player.level().getMaxY() - (side == Direction.UP ? 1 : 0) && world.mayInteract(player, pos)) {
                             InteractionResult result = player.gameMode.useItemOn(player, world, player.getItemInHand(hand), hand, blockHit);
                             if (result instanceof InteractionResult.Success success) {
-                                if (success.swingSource() == InteractionResult.SwingSource.SERVER)
+                                if (success.swingSource() != InteractionResult.SwingSource.NONE)
                                     player.swing(hand);
                                 ap.itemUseCooldown = 3;
                                 return true;
@@ -842,6 +848,10 @@ public class BotPlayerActionPack {
 
         public static Action interval(int interval, int ticks) {
             return new Action(-1, interval, 0, false, null, ticks);
+        }
+
+        public boolean resetMineCheck() {
+            return !isContinuous || ticksRemaining > 0;
         }
 
         Boolean tick(BotPlayerActionPack actionPack, ActionType type) {

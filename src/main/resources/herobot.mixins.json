@@ -1,6 +1,7 @@
 {
   "required": true,
   "minVersion": "0.8",
+  "mixinextras": {"minVersion":  "0.5.0"},
   "package": "hero.bane.herobot.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
@@ -21,6 +22,7 @@
     "LivingEntityMixin",
     "PlayerAccessor",
     "PlayerListMixin",
+    "PistonMovingBlockEntityMixin",
     "PlayerMixin",
     "ProjectileMixin",
     "RideCommandMixin",
