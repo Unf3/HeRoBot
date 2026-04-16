@@ -542,6 +542,7 @@ public class BotPlayer extends ServerPlayer {
 
     @Override
     public void knockback(double strength, double x, double z) {
+        if (this.getAbilities().invulnerable) return;
         scaledKnockback(strength, x, z, 1.0);
     }
 

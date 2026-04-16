@@ -249,6 +249,18 @@ public class BotPlayerActionPack {
         return this;
     }
 
+    public BotPlayerActionPack startOrExtender(ActionType type, int ticks) {
+        Action current = actions.get(type);
+        if (current != null && current.isContinuous) {
+            current.ticksRemaining = ticks;
+            return this;
+        }
+        Action previous = actions.remove(type);
+        if (previous != null) type.stop(player, previous);
+        actions.put(type, Action.continuous(ticks));
+        return this;
+    }
+
     public BotPlayerActionPack stopAll() {
         for (ActionType type : actions.keySet()) type.stop(player, actions.get(type));
         actions.clear();

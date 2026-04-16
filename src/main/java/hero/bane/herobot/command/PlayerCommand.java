@@ -144,13 +144,9 @@ public class PlayerCommand {
                         .executes(CommandHelper.manipulation(ap -> ap.start(type, Action.continuous())))
                         .then(Commands.argument("ticks", IntegerArgumentType.integer(1))
                                 .executes(c -> {
-                                            if (IntegerArgumentType.getInteger(c, "ticks") == 1) {
-                                                return CommandHelper.manipulate(c, ap -> ap.start(type, Action.once()));
-                                            } else {
-                                                return CommandHelper.manipulate(c,
-                                                        ap -> ap.start(type,
-                                                                Action.continuous(IntegerArgumentType.getInteger(c, "ticks"))));
-                                            }
+                                            int ticks = IntegerArgumentType.getInteger(c, "ticks");
+                                            return CommandHelper.manipulate(c,
+                                                    ap -> ap.startOrExtender(type, ticks));
                                         }
                                 )))
                 .then(Commands.literal("interval")

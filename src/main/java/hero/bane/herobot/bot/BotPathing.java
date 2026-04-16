@@ -160,8 +160,7 @@ public class BotPathing {
     }
 
     private void tryRecalcPath() {
-        if (lastRecalcTarget != null && lastRecalcTarget.distanceTo(target) <= 2.0
-                && currentIndex < path.size()) {
+        if (lastRecalcTarget != null && lastRecalcTarget.distanceTo(target) <= 2.0) {
             return;
         }
         List<BlockPos> newPath = PathFinder.findPath(bot.level(), bot.blockPosition(), target, settings, bot);
