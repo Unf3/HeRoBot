@@ -16,6 +16,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.PlayerRideableJumping;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.item.ItemStack;
@@ -47,6 +48,9 @@ public class BotPlayerActionPack {
 
     private long lastJumpOnceTick = -100;
     private boolean jumping;
+    private int vehicleJumpOverrideTicks = 0;
+    private boolean clearJumpNextTick = false;
+    private int jumpChargeAmount = 0;
 
     private int itemUseCooldown;
 
@@ -138,6 +142,14 @@ public class BotPlayerActionPack {
     public BotPlayerActionPack setStrafing(float value) {
         strafing = value;
         return this;
+    }
+
+    public float getForward() {
+        return forward;
+    }
+
+    public float getStrafing() {
+        return strafing;
     }
 
     public BotPlayerActionPack look(Direction direction) {
@@ -316,6 +328,15 @@ public class BotPlayerActionPack {
                     using.retry(this, ActionType.USE);
                 }
             }
+        }
+
+        if (vehicleJumpOverrideTicks > 0) {
+            player.setJumping(true);
+            vehicleJumpOverrideTicks--;
+            if (vehicleJumpOverrideTicks == 0) clearJumpNextTick = true;
+        } else if (clearJumpNextTick) {
+            player.setJumping(false);
+            clearJumpNextTick = false;
         }
 
         if ((forward != 0.0F || strafing != 0.0F) && player.getFoodData().getFoodLevel() < 3) {
@@ -671,26 +692,46 @@ public class BotPlayerActionPack {
                 long currentTick = player.level().getServer().getTickCount();
 
                 if (action.limit == 1) {
-                    // Double space bar for flying
-                    if (player.getAbilities().mayfly && (currentTick - ap.lastJumpOnceTick) <= 7) {
-                        player.getAbilities().flying = !player.getAbilities().flying;
-                        player.onUpdateAbilities();
-                        ap.lastJumpOnceTick = -100; // reset so triple tap doesn't re-toggle
-                        return false;
-                    }
-                    ap.lastJumpOnceTick = currentTick;
+                    if (player.isPassenger()) {
+                        if (player.getVehicle() instanceof PlayerRideableJumping jumpVehicle) {
+                            jumpVehicle.handleStartJump(1);
+                            jumpVehicle.handleStopJump();
+                            ap.jumpChargeAmount = 0;
+                        } else {
+                            ap.vehicleJumpOverrideTicks = 2;
+                            player.setJumping(true);
+                        }
+                    } else {
+                        // Double space bar for flying
+                        if (player.getAbilities().mayfly && (currentTick - ap.lastJumpOnceTick) <= 7) {
+                            player.getAbilities().flying = !player.getAbilities().flying;
+                            player.onUpdateAbilities();
+                            ap.lastJumpOnceTick = -100; // reset so triple tap doesn't re-toggle
+                            return false;
+                        }
+                        ap.lastJumpOnceTick = currentTick;
 
-                    if (player.getAbilities().flying) {
-                        // Move up for a tick while flying (idk what else to put here)
-                        ap.jumping = true;
-                    } else if (player.onGround()) {
-                        player.jumpFromGround();
-                    } else if (!player.onClimbable() && !player.getAbilities().flying) {
-                        player.tryToStartFallFlying();
+                        if (player.getAbilities().flying) {
+                            // Move up for a tick while flying (idk what else to put here)
+                            ap.jumping = true;
+                        } else if (player.onGround()) {
+                            player.jumpFromGround();
+                        } else if (!player.onClimbable() && !player.getAbilities().flying) {
+                            player.tryToStartFallFlying();
+                        }
                     }
                 } else {
                     // Continuous jump
-                    if (player.getAbilities().flying) {
+                    if (player.isPassenger()) {
+                        if (player.getVehicle() instanceof PlayerRideableJumping jumpVehicle) {
+                            ap.jumpChargeAmount = Math.min(ap.jumpChargeAmount + 1, 100);
+                            jumpVehicle.handleStartJump(ap.jumpChargeAmount);
+                        } else if (player.getAbilities().flying) {
+                            ap.jumping = true;
+                        } else {
+                            player.setJumping(true);
+                        }
+                    } else if (player.getAbilities().flying) {
                         ap.jumping = true;
                     } else {
                         player.setJumping(true);
@@ -702,8 +743,14 @@ public class BotPlayerActionPack {
             @Override
             void inactiveTick(ServerPlayer player, Action action) {
                 BotPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
-                player.setJumping(false);
+                if (ap.vehicleJumpOverrideTicks <= 0) {
+                    player.setJumping(false);
+                }
                 ap.jumping = false;
+                if (player.getVehicle() instanceof PlayerRideableJumping jumpVehicle) {
+                    jumpVehicle.handleStopJump();
+                    ap.jumpChargeAmount = 0;
+                }
             }
         },
         DROP_ITEM(true) {

@@ -393,6 +393,18 @@ public class BotPlayer extends ServerPlayer {
     }
 
     @Override
+    public @NonNull Vec3 getLastClientMoveIntent() {
+        BotPlayerActionPack ap = ((ServerPlayerInterface) this).getActionPack();
+        float forward = ap.getForward();
+        float strafing = ap.getStrafing();
+        if (forward == 0 && strafing == 0) return Vec3.ZERO;
+        float yawRad = getYRot() * (float) (Math.PI / 180.0);
+        double sin = Math.sin(yawRad);
+        double cos = Math.cos(yawRad);
+        return new Vec3(strafing * cos - forward * sin, 0, forward * cos + strafing * sin); // I think??? No one's gonna test this anyway who cares
+    }
+
+    @Override
     public void move(@NonNull MoverType moverType, @NonNull Vec3 vec3) {
         double oldX = this.getX();
         double oldZ = this.getZ();

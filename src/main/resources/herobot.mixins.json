@@ -5,6 +5,7 @@
   "package": "hero.bane.herobot.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "AbstractBoatMixin",
     "BlockItemMixin",
     "BlockMixin",
     "BlocksAttacksMixin",
