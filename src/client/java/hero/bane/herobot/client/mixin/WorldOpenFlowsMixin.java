@@ -7,6 +7,7 @@ import hero.bane.herobot.HeroBotSettings;
 import net.minecraft.client.gui.screens.worldselection.WorldOpenFlows;
 import net.minecraft.server.WorldStem;
 import net.minecraft.server.packs.repository.PackRepository;
+import net.minecraft.world.level.storage.LevelDataAndDimensions;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.level.storage.LevelStorageSource;
 import net.minecraft.world.level.storage.WorldData;
@@ -45,10 +46,10 @@ public abstract class WorldOpenFlowsMixin {
             Runnable runnable,
             CallbackInfo ci
     ) {
-        WorldData worldData = worldStem.worldData();
+        LevelDataAndDimensions.WorldDataAndGenSettings worldData = worldStem.worldDataAndGenSettings();
 
-        boolean customized = worldData.worldGenOptions().isOldCustomizedWorld();
-        boolean experimental = worldData.worldGenSettingsLifecycle() != Lifecycle.stable();
+        boolean customized = worldData.genSettings().options().isOldCustomizedWorld();
+        boolean experimental = worldData.data().worldGenSettingsLifecycle() != Lifecycle.stable();
 
         if (!customized && !experimental) return;
 

@@ -19,7 +19,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.CraftingMenu;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -54,13 +54,13 @@ public final class InventorySubtree {
                         .executes(InventorySubtree::closeScreen))
                 .then(Commands.literal("click")
                         .then(Commands.argument("slot", IntegerArgumentType.integer(0))
-                                .executes(c -> slotClick(c, 0, ClickType.PICKUP))))
+                                .executes(c -> slotClick(c, 0, ContainerInput.PICKUP))))
                 .then(Commands.literal("rightClick")
                         .then(Commands.argument("slot", IntegerArgumentType.integer(0))
-                                .executes(c -> slotClick(c, 1, ClickType.PICKUP))))
+                                .executes(c -> slotClick(c, 1, ContainerInput.PICKUP))))
                 .then(Commands.literal("shiftClick")
                         .then(Commands.argument("slot", IntegerArgumentType.integer(0))
-                                .executes(c -> slotClick(c, 0, ClickType.QUICK_MOVE))))
+                                .executes(c -> slotClick(c, 0, ContainerInput.QUICK_MOVE))))
                 .then(Commands.literal("keybindSwap")
                         .then(Commands.argument("slot", IntegerArgumentType.integer(0))
                                 .then(Commands.argument("hotbarSlot", IntegerArgumentType.integer(1, 9))
@@ -92,13 +92,13 @@ public final class InventorySubtree {
                         .executes(InventorySubtree::closeScreen))
                 .then(Commands.literal("click")
                         .then(Commands.argument("slot", IntegerArgumentType.integer(0))
-                                .executes(c -> containerSlotClick(c, 0, ClickType.PICKUP))))
+                                .executes(c -> containerSlotClick(c, 0, ContainerInput.PICKUP))))
                 .then(Commands.literal("rightClick")
                         .then(Commands.argument("slot", IntegerArgumentType.integer(0))
-                                .executes(c -> containerSlotClick(c, 1, ClickType.PICKUP))))
+                                .executes(c -> containerSlotClick(c, 1, ContainerInput.PICKUP))))
                 .then(Commands.literal("shiftClick")
                         .then(Commands.argument("slot", IntegerArgumentType.integer(0))
-                                .executes(c -> containerSlotClick(c, 0, ClickType.QUICK_MOVE))))
+                                .executes(c -> containerSlotClick(c, 0, ContainerInput.QUICK_MOVE))))
                 .then(Commands.literal("keybindSwap")
                         .then(Commands.argument("slot", IntegerArgumentType.integer(0))
                                 .then(Commands.argument("hotbarSlot", IntegerArgumentType.integer(1, 9))
@@ -183,7 +183,7 @@ public final class InventorySubtree {
         return 1;
     }
 
-    private static int slotClick(CommandContext<CommandSourceStack> c, int button, ClickType clickType) throws CommandSyntaxException {
+    private static int slotClick(CommandContext<CommandSourceStack> c, int button, ContainerInput ContainerInput) throws CommandSyntaxException {
         int slot = IntegerArgumentType.getInteger(c, "slot");
         for (BotPlayer bot : requireBots(c)) {
             AbstractContainerMenu menu = requireInventoryMenu(bot);
@@ -191,7 +191,7 @@ public final class InventorySubtree {
                 c.getSource().sendFailure(Component.literal("Index out of bounds, slot " + slot + " is out of range (0-" + (menu.slots.size() - 1) + ")"));
                 return 0;
             }
-            menu.clicked(slot, button, clickType, bot);
+            menu.clicked(slot, button, ContainerInput, bot);
             syncMenu(menu);
         }
         return 1;
@@ -206,7 +206,7 @@ public final class InventorySubtree {
                 c.getSource().sendFailure(Component.literal("Slot " + slot + " is out of range (0-" + (menu.slots.size() - 1) + ")"));
                 return 0;
             }
-            menu.clicked(slot, hotbar, ClickType.SWAP, bot);
+            menu.clicked(slot, hotbar, ContainerInput.SWAP, bot);
             syncMenu(menu);
         }
         return 1;
@@ -220,7 +220,7 @@ public final class InventorySubtree {
                 c.getSource().sendFailure(Component.literal("Slot " + slot + " is out of range (0-" + (menu.slots.size() - 1) + ")"));
                 return 0;
             }
-            menu.clicked(slot, 40, ClickType.SWAP, bot);
+            menu.clicked(slot, 40, ContainerInput.SWAP, bot);
             syncMenu(menu);
         }
         return 1;
@@ -234,7 +234,7 @@ public final class InventorySubtree {
                 c.getSource().sendFailure(Component.literal("Slot " + slot + " is out of range (0-" + (menu.slots.size() - 1) + ")"));
                 return 0;
             }
-            menu.clicked(slot, all ? 1 : 0, ClickType.THROW, bot);
+            menu.clicked(slot, all ? 1 : 0, ContainerInput.THROW, bot);
             syncMenu(menu);
         }
         return 1;
@@ -243,7 +243,7 @@ public final class InventorySubtree {
     private static int heldThrow(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
         for (BotPlayer bot : requireBots(c)) {
             AbstractContainerMenu menu = requireInventoryMenu(bot);
-            menu.clicked(-999, 0, ClickType.PICKUP, bot);
+            menu.clicked(-999, 0, ContainerInput.PICKUP, bot);
             syncMenu(menu);
         }
         return 1;
@@ -269,7 +269,7 @@ public final class InventorySubtree {
         return 1;
     }
 
-    private static int containerSlotClick(CommandContext<CommandSourceStack> c, int button, ClickType clickType) throws CommandSyntaxException {
+    private static int containerSlotClick(CommandContext<CommandSourceStack> c, int button, ContainerInput ContainerInput) throws CommandSyntaxException {
         int slot = IntegerArgumentType.getInteger(c, "slot");
         for (BotPlayer bot : requireBots(c)) {
             AbstractContainerMenu menu = requireContainerMenu(bot);
@@ -277,7 +277,7 @@ public final class InventorySubtree {
                 c.getSource().sendFailure(Component.literal("Slot " + slot + " is out of range (0-" + (menu.slots.size() - 1) + ")"));
                 return 0;
             }
-            menu.clicked(slot, button, clickType, bot);
+            menu.clicked(slot, button, ContainerInput, bot);
             syncMenu(menu);
         }
         return 1;
@@ -292,7 +292,7 @@ public final class InventorySubtree {
                 c.getSource().sendFailure(Component.literal("Slot " + slot + " is out of range (0-" + (menu.slots.size() - 1) + ")"));
                 return 0;
             }
-            menu.clicked(slot, hotbar, ClickType.SWAP, bot);
+            menu.clicked(slot, hotbar, ContainerInput.SWAP, bot);
             syncMenu(menu);
         }
         return 1;
@@ -306,7 +306,7 @@ public final class InventorySubtree {
                 c.getSource().sendFailure(Component.literal("Slot " + slot + " is out of range (0-" + (menu.slots.size() - 1) + ")"));
                 return 0;
             }
-            menu.clicked(slot, 40, ClickType.SWAP, bot);
+            menu.clicked(slot, 40, ContainerInput.SWAP, bot);
             syncMenu(menu);
         }
         return 1;
@@ -320,7 +320,7 @@ public final class InventorySubtree {
                 c.getSource().sendFailure(Component.literal("Slot " + slot + " is out of range (0-" + (menu.slots.size() - 1) + ")"));
                 return 0;
             }
-            menu.clicked(slot, all ? 1 : 0, ClickType.THROW, bot);
+            menu.clicked(slot, all ? 1 : 0, ContainerInput.THROW, bot);
             syncMenu(menu);
         }
         return 1;
@@ -329,7 +329,7 @@ public final class InventorySubtree {
     private static int containerHeldThrow(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
         for (BotPlayer bot : requireBots(c)) {
             AbstractContainerMenu menu = requireContainerMenu(bot);
-            menu.clicked(-999, 0, ClickType.PICKUP, bot);
+            menu.clicked(-999, 0, ContainerInput.PICKUP, bot);
             syncMenu(menu);
         }
         return 1;
@@ -375,7 +375,7 @@ public final class InventorySubtree {
                 if (!slotItem.isEmpty() && ItemStack.isSameItemSameComponents(slotItem, reference)) {
                     boolean isContainerSlot = isContainerSlot(menu, i);
                     if (fromContainer && isContainerSlot || !fromContainer && !isContainerSlot) {
-                        menu.clicked(i, 0, ClickType.QUICK_MOVE, bot);
+                        menu.clicked(i, 0, ContainerInput.QUICK_MOVE, bot);
                         moved++;
                     }
                 }
@@ -394,7 +394,7 @@ public final class InventorySubtree {
     }
 
     private static int recipeBook(CommandContext<CommandSourceStack> c, boolean useMaxItems) throws CommandSyntaxException {
-        Item targetItem = ItemArgument.getItem(c, "item").getItem();
+        Item targetItem = ItemArgument.getItem(c, "item").item().value();
         String itemName = BuiltInRegistries.ITEM.getKey(targetItem).toString();
 
         for (BotPlayer bot : requireBots(c)) {
@@ -421,7 +421,11 @@ public final class InventorySubtree {
                             matches = true;
                             break;
                         }
-                    } else if (display.result() instanceof SlotDisplay.ItemStackSlotDisplay(ItemStack stack)) {
+                    } else if (display.result() instanceof SlotDisplay.ItemStackSlotDisplay(
+                            net.minecraft.world.item.ItemStackTemplate stack1
+                    )) {
+                        ItemStack stack = stack1.create();
+
                         if (stack.getItem() == targetItem) {
                             matches = true;
                             break;
@@ -454,13 +458,13 @@ public final class InventorySubtree {
     }
 
     private static void executeDrag(AbstractContainerMenu menu, BotPlayer bot, int[] slots) {
-        menu.clicked(-999, AbstractContainerMenu.getQuickcraftMask(0, 0), ClickType.QUICK_CRAFT, bot);
+        menu.clicked(-999, AbstractContainerMenu.getQuickcraftMask(0, 0), ContainerInput.QUICK_CRAFT, bot);
         for (int slot : slots) {
             if (isValidSlot(menu, slot)) {
-                menu.clicked(slot, AbstractContainerMenu.getQuickcraftMask(1, 0), ClickType.QUICK_CRAFT, bot);
+                menu.clicked(slot, AbstractContainerMenu.getQuickcraftMask(1, 0), ContainerInput.QUICK_CRAFT, bot);
             }
         }
-        menu.clicked(-999, AbstractContainerMenu.getQuickcraftMask(2, 0), ClickType.QUICK_CRAFT, bot);
+        menu.clicked(-999, AbstractContainerMenu.getQuickcraftMask(2, 0), ContainerInput.QUICK_CRAFT, bot);
     }
 
     private static int queryInventory(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {

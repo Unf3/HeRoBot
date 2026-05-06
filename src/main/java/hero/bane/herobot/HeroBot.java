@@ -24,7 +24,7 @@ public class HeroBot implements ModInitializer {
     public void onInitialize() {
         HeroBotSettings.init();
 
-        PayloadTypeRegistry.playS2C().register(HeroBotSyncPayload.TYPE, HeroBotSyncPayload.STREAM_CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(HeroBotSyncPayload.TYPE, HeroBotSyncPayload.STREAM_CODEC);
 
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, env) ->
         {

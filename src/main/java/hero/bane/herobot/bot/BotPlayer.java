@@ -20,6 +20,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.DisconnectionDetails;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket;
@@ -652,7 +653,7 @@ public class BotPlayer extends ServerPlayer {
                 return false;
             }
 
-            if (damageSource.is(DamageTypeTags.IS_FREEZING) && this.getType().is(EntityTypeTags.FREEZE_HURTS_EXTRA_TYPES)) {
+            if (damageSource.is(DamageTypeTags.IS_FREEZING) && BuiltInRegistries.ENTITY_TYPE.wrapAsHolder(this.getType()).is(EntityTypeTags.FREEZE_HURTS_EXTRA_TYPES)) {
                 finalDamage *= 5.0F;
             }
 

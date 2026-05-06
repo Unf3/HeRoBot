@@ -819,16 +819,16 @@ public class BotPlayerActionPack {
                         boolean handWasEmpty = player.getItemInHand(hand).isEmpty();
                         boolean itemFrameEmpty = (entity instanceof ItemFrame) && ((ItemFrame) entity).getItem().isEmpty();
                         Vec3 relativeHitPos = entityHit.getLocation().subtract(entity.getX(), entity.getY(), entity.getZ());
-                        if (entity.interactAt(player, relativeHitPos, hand).consumesAction()) {
+                        if (entity.interact(player, hand, relativeHitPos).consumesAction()) {
                             ap.itemUseCooldown = 3;
                             return true;
                         }
+
                         // fix for SS itemframe always returns CONSUME even if no action is performed
-                        if (player.interactOn(entity, hand).consumesAction() && !(handWasEmpty && itemFrameEmpty)) {
+                        if (player.interactOn(entity, hand, relativeHitPos).consumesAction() && !(handWasEmpty && itemFrameEmpty)) {
                             ap.itemUseCooldown = 3;
                             return true;
-                        }
-                        break;
+                        }                        break;
                     }
                 }
                 ItemStack handItem = player.getItemInHand(hand);
